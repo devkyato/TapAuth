@@ -3,65 +3,63 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>APC Airhub Logs</title>
+    <title>APC Airhub Tap-In</title>
     <link rel="stylesheet" href="/static/app.css">
     <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
 </head>
-<body>
-    <main class="shell logs-shell">
-        <header class="public-header">
-            <div class="logo-row">
-                <img src="/static/apc_logo.png" alt="Asia Pacific College">
-                <img src="/static/apc_logo.png" alt="School of Engineering">
-            </div>
+<body class="tap-page">
+    <div class="cube-field" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
+
+    <main class="tap-shell">
+        <header class="tap-header">
+            <img src="/static/soe_airhub_logo.png" alt="Asia Pacific College School of Engineering">
             <h1>APC Airhub</h1>
             <p>School of Engineering</p>
             <time id="clock">--:--</time>
         </header>
 
-        <section class="workspace">
-            <div class="logs-panel">
-                <div class="logs-head">
-                    <div>
-                        <p id="tapMessage">Waiting for a card tap.</p>
-                        <h2>Recent Logs</h2>
-                    </div>
-                    <button class="secondary-action" type="button" id="refreshLogs">Refresh</button>
+        <section class="tap-stage" aria-live="polite">
+            <p class="tap-kicker">Tap your NFC card</p>
+            <h2 id="tapMessage">Ready for tap-in</h2>
+            <p id="tapSubtext">Your time-in will be recorded automatically.</p>
+        </section>
+
+        <section class="logs-panel tap-logs">
+            <div class="logs-head">
+                <div>
+                    <p>Latest activity</p>
+                    <h2>Recent Logs</h2>
                 </div>
-                <div class="table-wrap">
-                    <table class="logs-table">
-                        <thead>
-                            <tr>
-                                <th>Full Name</th>
-                                <th>NFC Code</th>
-                                <th>Date Logged</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="logsBody">
-                            <tr>
-                                <td colspan="4">Loading logs...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <p id="logsMessage" class="message"></p>
+                <button class="secondary-action" type="button" id="refreshLogs">Refresh</button>
             </div>
+            <div class="table-wrap">
+                <table class="logs-table">
+                    <thead>
+                        <tr>
+                            <th>Full Name</th>
+                            <th>NFC Code</th>
+                            <th>Date Logged</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsBody">
+                        <tr><td colspan="4">Loading logs...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p id="logsMessage" class="message"></p>
         </section>
     </main>
 
     <script>
         let tapCounter = 0;
+        let greetingTimer = null;
 
         function escapeHtml(value) {
             return String(value ?? '').replace(/[&<>"']/g, function(char) {
-                return {
-                    '&': '&amp;',
-                    '<': '&lt;',
-                    '>': '&gt;',
-                    '"': '&quot;',
-                    "'": '&#039;'
-                }[char];
+                return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char];
             });
         }
 
@@ -69,21 +67,28 @@
             $('#clock').text(new Date().toLocaleString());
         }
 
+        function showGreeting(message) {
+            clearTimeout(greetingTimer);
+            $('#tapMessage').text(message || 'Tap recorded').addClass('tap-flash');
+            $('#tapSubtext').text('Time-in saved. Welcome.');
+            greetingTimer = setTimeout(function() {
+                $('#tapMessage').removeClass('tap-flash').text('Ready for tap-in');
+                $('#tapSubtext').text('Your time-in will be recorded automatically.');
+            }, 3200);
+        }
+
         function renderLogs(rows) {
             if (!Array.isArray(rows) || rows.length === 0) {
                 $('#logsBody').html('<tr><td colspan="4">No logs yet.</td></tr>');
                 return;
             }
-
-            const html = rows.slice(0, 50).map(function(row) {
-                return `
-                    <tr>
-                        <td>${escapeHtml(row.fullname)}</td>
-                        <td><code>${escapeHtml(row.nfc_code)}</code></td>
-                        <td>${escapeHtml(row.date_logged)}</td>
-                        <td><span class="status-pill">${escapeHtml(row.status)}</span></td>
-                    </tr>
-                `;
+            const html = rows.slice(0, 8).map(function(row) {
+                return `<tr>
+                    <td>${escapeHtml(row.fullname)}</td>
+                    <td><code>${escapeHtml(row.nfc_code)}</code></td>
+                    <td>${escapeHtml(row.date_logged)}</td>
+                    <td><span class="status-pill">${escapeHtml(row.status)}</span></td>
+                </tr>`;
             }).join('');
             $('#logsBody').html(html);
         }
@@ -105,17 +110,14 @@
 
         function pollLatestTap() {
             $.getJSON('/latest_tap?since=' + tapCounter, function(resp) {
-                if (!resp.changed) {
-                    return;
-                }
+                if (!resp.changed) return;
                 tapCounter = resp.tap_counter;
-                $('#tapMessage').text(resp.message || 'Card captured.');
+                showGreeting(resp.message || 'Tap recorded');
                 fetchLogs();
             });
         }
 
         $('#refreshLogs').on('click', fetchLogs);
-
         updateClock();
         fetchLogs();
         setInterval(updateClock, 1000);
