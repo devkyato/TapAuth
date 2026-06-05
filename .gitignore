@@ -18,5 +18,3 @@ exports/
 firebase-credentials.json
 serviceAccount*.json
 *.private.json
-
-firebase-service-account.json
