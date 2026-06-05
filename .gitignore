@@ -13,7 +13,3 @@ exports/
 
 *.sqlite
 *.sqlite3
-
-firebase-credentials.json
-serviceAccount*.json
-*.private.json
