@@ -69,7 +69,10 @@
 
         function showGreeting(message) {
             clearTimeout(greetingTimer);
-            $('#tapMessage').text(message || 'Tap recorded').addClass('tap-flash');
+            const tapMessage = document.getElementById('tapMessage');
+            $('#tapMessage').removeClass('tap-flash').text(message || 'Tap recorded');
+            void tapMessage.offsetWidth;
+            $('#tapMessage').addClass('tap-flash');
             $('#tapSubtext').text('Time-in saved. Welcome.');
             greetingTimer = setTimeout(function() {
                 $('#tapMessage').removeClass('tap-flash').text('Ready for tap-in');

@@ -19,7 +19,7 @@ body {
     min-height: 100vh;
     background: var(--page);
     color: var(--ink);
-    font-family: "Segoe UI", Arial, sans-serif;
+    font-family: "Aptos", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
 
 a {
@@ -469,7 +469,14 @@ input:focus {
 
 .tap-header time {
     font-size: 22px;
-    font-weight: 900;
+    font-weight: 800;
+}
+
+.tap-header h1,
+.tap-stage h2,
+.logs-head h2 {
+    font-family: "Aptos Display", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: 0;
 }
 
 .tap-stage {
@@ -481,13 +488,13 @@ input:focus {
 .tap-kicker {
     color: var(--accent-dark);
     font-size: 15px;
-    font-weight: 900;
+    font-weight: 800;
     margin: 0 0 8px;
     text-transform: uppercase;
 }
 
 .tap-stage h2 {
-    font-size: clamp(42px, 7vw, 78px);
+    font-size: clamp(40px, 6vw, 72px);
     line-height: 1;
     transition: opacity 400ms ease, transform 400ms ease;
 }
