@@ -1,4 +1,13 @@
 import os
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
+if load_dotenv:
+    load_dotenv(Path(__file__).with_name(".env"))
 
 APP_CONFIG = {
     "name": "APC Airhub",
