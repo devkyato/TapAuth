@@ -14,7 +14,7 @@
                 <img src="/static/apc_logo.png" alt="Asia Pacific College School of Engineering">
                 <span>
                     <strong>APC Airhub</strong>
-                    <small>NFC Access Registration</small>
+                    <small>Registration Dashboard</small>
                 </span>
             </a>
             <nav class="nav">
@@ -42,7 +42,7 @@
             <div class="panel">
                 <div class="panel-head">
                     <p class="eyebrow">Current Tap</p>
-                    <h1>Scan card, then register profile.</h1>
+                    <h1>Scan card first. Then assign the profile.</h1>
                 </div>
                 <div class="scan-card">
                     <span class="pulse"></span>
@@ -88,7 +88,7 @@
                     <span>NFC Code</span>
                     <input type="text" id="nfc_code" name="nfc_code" readonly required>
                 </label>
-                <button class="primary-action" type="submit">Register Card</button>
+                <button class="primary-action" type="submit">Assign Card</button>
             </form>
         </section>
     </main>
@@ -116,7 +116,7 @@
                 tapCounter = resp.tap_counter;
                 $('#nfc_code').val(resp.uid || '');
                 $('#scanPreview').text(resp.uid || 'Waiting for card');
-                setMessage('Card captured. Complete the profile and register.', 'success');
+                setMessage('Card captured and ready to assign. Complete the profile, then register.', 'success');
             });
         }
 

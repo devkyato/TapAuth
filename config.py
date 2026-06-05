@@ -14,6 +14,7 @@ APP_CONFIG = {
     "environment": os.getenv("AIRHUB_ENV", "local"),
     "active_storage": os.getenv("AIRHUB_STORAGE", "mysql"),
     "firebase_ready": True,
+    "debug": os.getenv("AIRHUB_DEBUG", "false").lower() == "true",
 }
 
 WIFI_CONFIG = {
@@ -30,7 +31,7 @@ MYSQL_CONFIG = {
 
 FIREBASE_CONFIG = {
     "enabled": os.getenv("AIRHUB_FIREBASE_ENABLED", "false").lower() == "true",
-    "mode": os.getenv("AIRHUB_FIREBASE_MODE", "firestore"),
+    "mode": os.getenv("AIRHUB_FIREBASE_MODE", "realtime_db"),
     "database_url": os.getenv("AIRHUB_FIREBASE_DATABASE_URL", ""),
     "credentials_path": os.getenv("GOOGLE_APPLICATION_CREDENTIALS", ""),
     "project_id": os.getenv("AIRHUB_FIREBASE_PROJECT_ID", ""),

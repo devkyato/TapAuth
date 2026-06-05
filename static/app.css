@@ -526,3 +526,30 @@ input:focus {
     .tap-header img { height: 108px; width: 108px; }
     .tap-stage { min-height: 145px; }
 }
+
+.guest-panel {
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin: 0 auto 18px;
+    max-width: 620px;
+    padding: 18px;
+}
+
+.guest-form {
+    align-items: end;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: 1fr auto;
+}
+
+.guest-form .primary-action {
+    grid-column: auto;
+    min-height: 44px;
+    padding: 0 18px;
+}
+
+@media (max-width: 700px) {
+    .guest-form { grid-template-columns: 1fr; }
+    .guest-form .primary-action { grid-column: 1; }
+}

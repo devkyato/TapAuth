@@ -81,6 +81,7 @@ sudo udevadm trigger || true
 # pcscd often claims the ACR122U before libnfc can use it.
 sudo systemctl stop pcscd || true
 sudo systemctl disable pcscd || true
+echo "blacklist pn533_usb" | sudo tee /etc/modprobe.d/blacklist-libnfc.conf >/dev/null || true
 
 sudo tee "/etc/systemd/system/$SERVICE_NAME" >/dev/null <<EOF
 [Unit]

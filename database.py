@@ -85,13 +85,13 @@ def create_user(student_no, lastname, firstname, middlename, course, project_typ
             conn.close()
 
 
-def insert_log(nfc_code):
+def insert_log(nfc_code, guest_name=None):
     conn = None
     cursor = None
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO user_logs (nfc_code) VALUES (%s)", (nfc_code,))
+        cursor.execute("INSERT INTO user_logs (nfc_code, guest_name) VALUES (%s, %s)", (nfc_code, guest_name))
         log_id = cursor.lastrowid
         conn.commit()
         return get_log_by_id(log_id)
@@ -128,6 +128,52 @@ def get_user_by_nfc(nfc_code):
         if conn and conn.is_connected():
             conn.close()
 
+
+
+
+def get_user_by_id(user_id):
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT id, student_no, lastname, firstname, middlename, fullname, course, project_type, room, nfc_code, created_at, updated_at
+            FROM users
+            WHERE id=%s
+            """,
+            (user_id,),
+        )
+        return cursor.fetchone()
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
+def update_log_guest_name(log_id, guest_name):
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE user_logs
+            SET guest_name=%s
+            WHERE id=%s
+            """,
+            ((guest_name or "").strip(), log_id),
+        )
+        conn.commit()
+        return get_log_by_id(log_id)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
 
 def get_log_by_id(log_id):
     conn = None

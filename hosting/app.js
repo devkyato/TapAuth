@@ -1,15 +1,15 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import {
-    collection,
-    getFirestore,
-    limit,
-    onSnapshot,
-    orderBy,
-    query
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+    getDatabase,
+    limitToLast,
+    onValue,
+    orderByChild,
+    query,
+    ref
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
 const app = initializeApp(window.AIRHUB_FIREBASE_CONFIG);
-const db = getFirestore(app);
+const db = getDatabase(app, "https://airhub-login-default-rtdb.asia-southeast1.firebasedatabase.app/");
 const logsBody = document.getElementById("logsBody");
 const syncState = document.getElementById("syncState");
 const tapMessage = document.getElementById("tapMessage");
@@ -19,18 +19,13 @@ let greetingTimer = null;
 
 function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, (char) => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#039;"
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
     }[char]));
 }
 
 function formatDate(value) {
     if (!value) return "Pending time";
-    const date = typeof value.toDate === "function" ? value.toDate() : new Date(value);
-    return date.toLocaleString();
+    return new Date(value).toLocaleString();
 }
 
 function updateClock() {
@@ -40,10 +35,10 @@ function updateClock() {
 function showGreeting(name, status) {
     clearTimeout(greetingTimer);
     tapMessage.classList.remove("tap-flash");
-    tapMessage.textContent = status === "GUEST" ? "Please register your name." : `Hi, ${name}!`;
+    tapMessage.textContent = status === "GUEST_PENDING" ? "Guest accepted. Type your name on the kiosk." : `Hi, ${name}!`;
     void tapMessage.offsetWidth;
     tapMessage.classList.add("tap-flash");
-    tapSubtext.textContent = status === "GUEST" ? "Guest taps need a registered name before they count as active." : "Time-in saved. Welcome.";
+    tapSubtext.textContent = status === "GUEST_PENDING" ? "The tap is saved locally and will sync when online." : "Time-in saved. Welcome.";
     greetingTimer = setTimeout(() => {
         tapMessage.classList.remove("tap-flash");
         tapMessage.textContent = "Ready for tap-in";
@@ -52,21 +47,24 @@ function showGreeting(name, status) {
 }
 
 function renderLogs(snapshot) {
-    if (snapshot.empty) {
+    const value = snapshot.val() || {};
+    const rows = Object.entries(value).map(([id, row]) => ({ id, ...row }))
+        .sort((a, b) => new Date(b.date_logged || 0) - new Date(a.date_logged || 0));
+
+    if (rows.length === 0) {
         logsBody.innerHTML = '<tr><td colspan="3">No logs yet.</td></tr>';
         return;
     }
 
-    const rows = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     const newest = rows[0];
     if (newest && newest.id !== lastSeenId) {
-        if (lastSeenId !== null) showGreeting(newest.fullname || "Name required", newest.status);
+        if (lastSeenId !== null) showGreeting(newest.fullname || "Guest", newest.status);
         lastSeenId = newest.id;
     }
 
-    logsBody.innerHTML = rows.map((row) => `
+    logsBody.innerHTML = rows.slice(0, 12).map((row) => `
         <tr>
-            <td>${escapeHtml(row.fullname || "Name required")}</td>
+            <td>${escapeHtml(row.fullname || "Guest")}</td>
             <td>${escapeHtml(formatDate(row.date_logged))}</td>
             <td><span class="status-pill">${escapeHtml(row.status || "GUEST")}</span></td>
         </tr>
@@ -76,11 +74,11 @@ function renderLogs(snapshot) {
 updateClock();
 setInterval(updateClock, 1000);
 
-const logsQuery = query(collection(db, "airhub_logs"), orderBy("date_logged", "desc"), limit(12));
-onSnapshot(logsQuery, (snapshot) => {
+const logsQuery = query(ref(db, "airhub/logs"), orderByChild("date_logged"), limitToLast(12));
+onValue(logsQuery, (snapshot) => {
     syncState.textContent = "Live";
     renderLogs(snapshot);
 }, (error) => {
     syncState.textContent = "Offline";
-    logsBody.innerHTML = `<tr><td colspan="3">${escapeHtml(error.message || "Unable to load Firestore logs.")}</td></tr>`;
+    logsBody.innerHTML = `<tr><td colspan="3">${escapeHtml(error.message || "Unable to load Realtime Database logs.")}</td></tr>`;
 });

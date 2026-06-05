@@ -1,0 +1,17 @@
+{
+  "rules": {
+    "airhub": {
+      "logs": {
+        ".read": true,
+        ".write": false,
+        ".indexOn": ["date_logged"]
+      },
+      "users": {
+        ".read": false,
+        ".write": false
+      }
+    },
+    ".read": false,
+    ".write": false
+  }
+}
