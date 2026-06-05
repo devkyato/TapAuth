@@ -33,6 +33,59 @@ GOOGLE_APPLICATION_CREDENTIALS=/home/mako-airhub/loginsys_airhub/firebase-servic
 
 The service account JSON must stay on the Raspberry Pi and must not be committed.
 
+
+## GitHub CLI Raspberry Pi Flow
+
+Fresh Pi clone/sync with GitHub CLI:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y gh
+gh auth login
+bash <(curl -fsSL https://raw.githubusercontent.com/devkyato/loginsys_airhub/main/scripts/bootstrap_from_github.sh)
+```
+
+If the repo is already on the Pi:
+
+```bash
+cd /home/mako-airhub/loginsys_airhub
+bash scripts/update_pi_from_github.sh
+```
+
+That update script pulls `main`, installs Python requirements, creates/updates the MySQL database, applies `schema.sql`, restarts the auto-run service, and uploads MySQL data to Firestore when `AIRHUB_FIREBASE_ENABLED=true`.
+
+## MySQL Database Setup
+
+Create `.env` on the Raspberry Pi only:
+
+```bash
+cd /home/mako-airhub/loginsys_airhub
+cp .env.example .env
+nano .env
+```
+
+Set the new local database values there:
+
+```env
+AIRHUB_DB_NAME=airhub_db
+AIRHUB_DB_USER=userigga
+AIRHUB_DB_PASSWORD=<your_mysql_password>
+```
+
+Do not commit `.env`. The setup scripts create the database/user if they do not exist.
+
+## Auto-Run On Power-On
+
+`bash scripts/setup_raspberry_pi.sh` installs `airhub.service` as a systemd service:
+
+```bash
+sudo systemctl enable airhub.service
+sudo systemctl restart airhub.service
+sudo systemctl status airhub.service
+```
+
+That means the tap-in app starts automatically whenever the Raspberry Pi powers on.
+
 ## Raspberry Pi Setup
 
 Run from this folder on the Raspberry Pi:

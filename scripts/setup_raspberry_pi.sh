@@ -43,6 +43,7 @@ fi
 sudo apt-get update
 sudo apt-get install -y \
   git \
+  gh \
   python3 \
   python3-venv \
   python3-pip \
@@ -117,7 +118,7 @@ Open:
   http://$(hostname -I | awk '{print $1}'):5000/
 
 Hidden registration:
-  http://$(hostname -I | awk '{print $1}'):5000/airhub-register
+  http://$(hostname -I | awk '{print $1}'):5000/airhub-register?code=$AIRHUB_REGISTRATION_CODE
 
 If the ACR122U still shows USB busy, unplug it, wait 5 seconds, plug it back in, then run:
   sudo systemctl restart $SERVICE_NAME
