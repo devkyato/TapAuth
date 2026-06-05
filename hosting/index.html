@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APC Airhub Tap-In</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div class="cube-field" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
+
+    <main class="tap-shell">
+        <header class="tap-header">
+            <img src="/assets/soe_airhub_logo.png" alt="Asia Pacific College School of Engineering">
+            <h1>APC Airhub</h1>
+            <p>School of Engineering</p>
+            <time id="clock">--:--</time>
+        </header>
+
+        <section class="tap-stage" aria-live="polite">
+            <p class="tap-kicker">Tap-in system</p>
+            <h2 id="tapMessage">Ready for tap-in</h2>
+            <p id="tapSubtext">Recent taps from the Raspberry Pi appear here automatically.</p>
+        </section>
+
+        <section class="logs-panel">
+            <div class="logs-head">
+                <div>
+                    <p>Live Firestore activity</p>
+                    <h2>Recent Logs</h2>
+                </div>
+                <span id="syncState" class="sync-pill">Connecting</span>
+            </div>
+            <div class="table-wrap">
+                <table class="logs-table">
+                    <thead>
+                        <tr>
+                            <th>Full Name</th>
+                            <th>Date Logged</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsBody">
+                        <tr><td colspan="3">Loading logs...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="/firebase-config.js"></script>
+    <script type="module" src="/app.js"></script>
+</body>
+</html>

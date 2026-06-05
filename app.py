@@ -10,13 +10,17 @@ from database import (
     test_database_connection,
 )
 from scanner import NFCStandbyReader
+from firebase_adapter import sync_log, sync_user
 
 app = Flask(__name__)
 
 
 def handle_tap(uid):
-    insert_log(uid)
-    fullname = get_user_fullname(uid) or "Guest"
+    log_record = insert_log(uid)
+    sync_log(log_record)
+    fullname = get_user_fullname(uid)
+    if not fullname:
+        return "Please register your name."
     return f"Hi, {fullname}!"
 
 
@@ -110,7 +114,7 @@ def register():
         return jsonify({"error": f"Missing required field(s): {', '.join(missing)}"}), 400
 
     try:
-        create_user(
+        user_record = create_user(
             student_no=request.form["student_no"],
             lastname=request.form["lastname"],
             firstname=request.form["firstname"],
@@ -120,6 +124,7 @@ def register():
             room=request.form["room"],
             nfc_code=request.form["nfc_code"],
         )
+        sync_user(user_record)
         return jsonify({"success": True, "message": "Registration successful."})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
