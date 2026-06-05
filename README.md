@@ -1,4 +1,6 @@
-# New APC Airhub System
+# loginsys_airhub
+
+APC Airhub NFC registration and logging system.
 
 This folder contains the rebuilt NFC registration and logging system.
 
