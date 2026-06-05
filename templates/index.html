@@ -55,6 +55,7 @@
             </div>
 
             <form class="panel form-grid" id="registrationForm" action="/register" method="post">
+                <input type="hidden" id="access_code" name="access_code" value="{{ access_code }}">
                 <label>
                     <span>Student/Employee No.</span>
                     <input type="text" id="student_no" name="student_no" autocomplete="off" required>

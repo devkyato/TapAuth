@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from flask import Flask, jsonify, render_template, request
 
-from config import APP_CONFIG, WIFI_CONFIG
+from config import ACCESS_CONFIG, APP_CONFIG, WIFI_CONFIG
 from database import (
     create_user,
     get_logs,
@@ -24,6 +24,17 @@ nfc_reader = NFCStandbyReader(on_tap=handle_tap)
 nfc_reader.start()
 
 
+def registration_authorized():
+    code = ACCESS_CONFIG.get("registration_code", "")
+    if not code:
+        return True
+    supplied = (
+        request.args.get("code")
+        or request.form.get("access_code")
+        or request.headers.get("X-Airhub-Code")
+    )
+    return supplied == code
+
 @app.route("/")
 def public_logs():
     return render_template("login.html")
@@ -36,7 +47,9 @@ def login():
 
 @app.route("/airhub-register")
 def index():
-    return render_template("index.html")
+    if not registration_authorized():
+        return "Registration is locked.", 403
+    return render_template("index.html", access_code=request.args.get("code", ""))
 
 
 @app.route("/system_status")
@@ -80,6 +93,9 @@ def get_nfc_code():
 
 @app.route("/register", methods=["POST"])
 def register():
+    if not registration_authorized():
+        return jsonify({"error": "Registration is locked."}), 403
+
     required_fields = (
         "student_no",
         "lastname",
