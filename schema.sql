@@ -30,6 +30,19 @@ CREATE TABLE IF NOT EXISTS user_logs (
     INDEX idx_user_logs_date_logged (date_logged)
 );
 
+
+CREATE TABLE IF NOT EXISTS firebase_sync_queue (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    record_type ENUM('user','log') NOT NULL,
+    record_id INT NOT NULL,
+    attempts INT NOT NULL DEFAULT 0,
+    last_error TEXT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    synced_at TIMESTAMP NULL DEFAULT NULL,
+    UNIQUE KEY uniq_firebase_sync_record (record_type, record_id),
+    INDEX idx_firebase_sync_pending (synced_at, updated_at)
+);
 CREATE OR REPLACE VIEW user_logs_info AS
 SELECT
     l.id,

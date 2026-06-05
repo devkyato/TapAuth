@@ -214,3 +214,118 @@ def get_all_logs():
             cursor.close()
         if conn and conn.is_connected():
             conn.close()
+
+def enqueue_firebase_sync(record_type, record_id, error=None):
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO firebase_sync_queue (record_type, record_id, attempts, last_error)
+            VALUES (%s, %s, 0, %s)
+            ON DUPLICATE KEY UPDATE
+                synced_at=NULL,
+                last_error=VALUES(last_error),
+                updated_at=CURRENT_TIMESTAMP
+            """,
+            (record_type, record_id, error),
+        )
+        conn.commit()
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
+def get_pending_firebase_sync(limit=100):
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT id, record_type, record_id, attempts, last_error, created_at, updated_at
+            FROM firebase_sync_queue
+            WHERE synced_at IS NULL
+            ORDER BY updated_at ASC, id ASC
+            LIMIT %s
+            """,
+            (limit,),
+        )
+        return cursor.fetchall()
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
+def mark_firebase_sync_done(queue_id):
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE firebase_sync_queue
+            SET synced_at=CURRENT_TIMESTAMP, last_error=NULL, updated_at=CURRENT_TIMESTAMP
+            WHERE id=%s
+            """,
+            (queue_id,),
+        )
+        conn.commit()
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
+def mark_firebase_sync_failed(queue_id, error):
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE firebase_sync_queue
+            SET attempts=attempts+1, last_error=%s, updated_at=CURRENT_TIMESTAMP
+            WHERE id=%s
+            """,
+            (str(error)[:1000], queue_id),
+        )
+        conn.commit()
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
+def get_firebase_queue_count():
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT
+                SUM(CASE WHEN synced_at IS NULL THEN 1 ELSE 0 END) AS pending,
+                COUNT(*) AS total
+            FROM firebase_sync_queue
+            """
+        )
+        row = cursor.fetchone() or {}
+        return {"pending": int(row.get("pending") or 0), "total": int(row.get("total") or 0)}
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
