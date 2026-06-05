@@ -32,12 +32,13 @@ CREATE TABLE IF NOT EXISTS user_logs (
 
 CREATE OR REPLACE VIEW user_logs_info AS
 SELECT
+    l.id,
     l.nfc_code,
     l.date_logged,
     CASE
         WHEN u.id IS NULL THEN 'GUEST'
         ELSE 'REGISTERED'
     END AS status,
-    COALESCE(u.fullname, 'Guest') AS fullname
+    COALESCE(u.fullname, 'Name required') AS fullname
 FROM user_logs l
 LEFT JOIN users u ON u.nfc_code = l.nfc_code;

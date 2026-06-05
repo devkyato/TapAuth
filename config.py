@@ -30,7 +30,7 @@ MYSQL_CONFIG = {
 
 FIREBASE_CONFIG = {
     "enabled": os.getenv("AIRHUB_FIREBASE_ENABLED", "false").lower() == "true",
-    "mode": os.getenv("AIRHUB_FIREBASE_MODE", "realtime_db"),
+    "mode": os.getenv("AIRHUB_FIREBASE_MODE", "firestore"),
     "database_url": os.getenv("AIRHUB_FIREBASE_DATABASE_URL", ""),
     "credentials_path": os.getenv("GOOGLE_APPLICATION_CREDENTIALS", ""),
     "project_id": os.getenv("AIRHUB_FIREBASE_PROJECT_ID", ""),

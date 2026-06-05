@@ -77,6 +77,7 @@ def create_user(student_no, lastname, firstname, middlename, course, project_typ
             ),
         )
         conn.commit()
+        return get_user_by_nfc(nfc_code)
     finally:
         if cursor:
             cursor.close()
@@ -91,7 +92,9 @@ def insert_log(nfc_code):
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute("INSERT INTO user_logs (nfc_code) VALUES (%s)", (nfc_code,))
+        log_id = cursor.lastrowid
         conn.commit()
+        return get_log_by_id(log_id)
     finally:
         if cursor:
             cursor.close()
@@ -100,14 +103,47 @@ def insert_log(nfc_code):
 
 
 def get_user_fullname(nfc_code):
+    user = get_user_by_nfc(nfc_code)
+    return user["fullname"] if user else None
+
+
+def get_user_by_nfc(nfc_code):
     conn = None
     cursor = None
     try:
         conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT fullname FROM users WHERE nfc_code=%s", (nfc_code,))
-        row = cursor.fetchone()
-        return row[0] if row else None
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT id, student_no, lastname, firstname, middlename, fullname, course, project_type, room, nfc_code, created_at, updated_at
+            FROM users
+            WHERE nfc_code=%s
+            """,
+            (nfc_code,),
+        )
+        return cursor.fetchone()
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
+def get_log_by_id(log_id):
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT id, nfc_code, date_logged, status, fullname
+            FROM user_logs_info
+            WHERE id=%s
+            """,
+            (log_id,),
+        )
+        return cursor.fetchone()
     finally:
         if cursor:
             cursor.close()
@@ -123,12 +159,54 @@ def get_logs(limit=100):
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
             """
-            SELECT nfc_code, date_logged, status, fullname
+            SELECT id, date_logged, status, fullname
             FROM user_logs_info
             ORDER BY date_logged DESC
             LIMIT %s
             """,
             (limit,),
+        )
+        return cursor.fetchall()
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
+def get_all_users():
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT id, student_no, lastname, firstname, middlename, fullname, course, project_type, room, nfc_code, created_at, updated_at
+            FROM users
+            ORDER BY id ASC
+            """
+        )
+        return cursor.fetchall()
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
+def get_all_logs():
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT id, nfc_code, date_logged, status, fullname
+            FROM user_logs_info
+            ORDER BY date_logged ASC
+            """
         )
         return cursor.fetchall()
     finally:

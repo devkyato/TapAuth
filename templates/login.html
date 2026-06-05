@@ -39,13 +39,12 @@
                     <thead>
                         <tr>
                             <th>Full Name</th>
-                            <th>NFC Code</th>
                             <th>Date Logged</th>
                             <th>Status</th>
                         </tr>
                     </thead>
                     <tbody id="logsBody">
-                        <tr><td colspan="4">Loading logs...</td></tr>
+                        <tr><td colspan="3">Loading logs...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -82,13 +81,12 @@
 
         function renderLogs(rows) {
             if (!Array.isArray(rows) || rows.length === 0) {
-                $('#logsBody').html('<tr><td colspan="4">No logs yet.</td></tr>');
+                $('#logsBody').html('<tr><td colspan="3">No logs yet.</td></tr>');
                 return;
             }
             const html = rows.slice(0, 8).map(function(row) {
                 return `<tr>
                     <td>${escapeHtml(row.fullname)}</td>
-                    <td><code>${escapeHtml(row.nfc_code)}</code></td>
                     <td>${escapeHtml(row.date_logged)}</td>
                     <td><span class="status-pill">${escapeHtml(row.status)}</span></td>
                 </tr>`;

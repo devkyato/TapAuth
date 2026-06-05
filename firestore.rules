@@ -1,0 +1,18 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /airhub_logs/{logId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /airhub_users/{userId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
