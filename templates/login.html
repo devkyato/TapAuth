@@ -8,55 +8,22 @@
     <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
 </head>
 <body>
-    <main class="shell">
-        <header class="topbar">
-            <a class="brand" href="/">
-                <img src="/static/apc_logo.png" alt="Asia Pacific College School of Engineering">
-                <span>
-                    <strong>APC Airhub</strong>
-                    <small>NFC Access Logs</small>
-                </span>
-            </a>
-            <nav class="nav">
-                <a href="/">Register</a>
-                <a class="active" href="/login">Logs</a>
-            </nav>
+    <main class="shell logs-shell">
+        <header class="public-header">
+            <div class="logo-row">
+                <img src="/static/apc_logo.png" alt="Asia Pacific College">
+                <img src="/static/apc_logo.png" alt="School of Engineering">
+            </div>
+            <h1>APC Airhub</h1>
+            <p>School of Engineering</p>
+            <time id="clock">--:--</time>
         </header>
 
-        <section class="status-strip" aria-live="polite">
-            <div>
-                <span class="label">Reader</span>
-                <strong id="readerStatus">Checking...</strong>
-            </div>
-            <div>
-                <span class="label">Database</span>
-                <strong id="databaseStatus">Checking...</strong>
-            </div>
-            <div>
-                <span class="label">Time</span>
-                <strong id="clock">--:--</strong>
-            </div>
-        </section>
-
         <section class="workspace">
-            <div class="panel log-hero">
-                <div>
-                    <p class="eyebrow">Live NFC Greeting</p>
-                    <h1 id="tapMessage">Waiting for a card tap.</h1>
-                </div>
-                <div class="scan-card compact">
-                    <span class="pulse"></span>
+            <div class="logs-panel">
+                <div class="logs-head">
                     <div>
-                        <span class="label">Last UID</span>
-                        <strong id="lastUid">None yet</strong>
-                    </div>
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-head row">
-                    <div>
-                        <p class="eyebrow">Local MySQL via phpMyAdmin</p>
+                        <p id="tapMessage">Waiting for a card tap.</p>
                         <h2>Recent Logs</h2>
                     </div>
                     <button class="secondary-action" type="button" id="refreshLogs">Refresh</button>
@@ -102,13 +69,6 @@
             $('#clock').text(new Date().toLocaleString());
         }
 
-        function refreshStatus() {
-            $.getJSON('/system_status', function(data) {
-                $('#readerStatus').text(data.scanner.connected ? 'Connected' : 'Standby');
-                $('#databaseStatus').text(data.database.connected ? 'Local MySQL' : 'Needs setup');
-            });
-        }
-
         function renderLogs(rows) {
             if (!Array.isArray(rows) || rows.length === 0) {
                 $('#logsBody').html('<tr><td colspan="4">No logs yet.</td></tr>');
@@ -150,7 +110,6 @@
                 }
                 tapCounter = resp.tap_counter;
                 $('#tapMessage').text(resp.message || 'Card captured.');
-                $('#lastUid').text(resp.uid || 'None yet');
                 fetchLogs();
             });
         }
@@ -158,10 +117,8 @@
         $('#refreshLogs').on('click', fetchLogs);
 
         updateClock();
-        refreshStatus();
         fetchLogs();
         setInterval(updateClock, 1000);
-        setInterval(refreshStatus, 5000);
         setInterval(pollLatestTap, 400);
     </script>
 </body>

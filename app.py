@@ -25,13 +25,18 @@ nfc_reader.start()
 
 
 @app.route("/")
-def index():
-    return render_template("index.html")
+def public_logs():
+    return render_template("login.html")
 
 
 @app.route("/login")
 def login():
     return render_template("login.html")
+
+
+@app.route("/airhub-register")
+def index():
+    return render_template("index.html")
 
 
 @app.route("/system_status")
