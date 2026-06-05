@@ -31,3 +31,20 @@ Then upload all active MySQL data to Firestore:
 source .venv/bin/activate
 python scripts/sync_firestore.py
 ```
+## Dump Raw MariaDB Files To Real SQL
+
+If the old raw MariaDB folder is available on a Raspberry Pi/Linux machine, create a real SQL dump with:
+
+```bash
+bash scripts/dump_old_raw_mariadb.sh /path/to/mysql_raw_from_E_var_var_lib_mysql /path/to/old_airhub_real_dump.sql
+```
+
+Then merge and upload:
+
+```bash
+bash scripts/migrate_old_sql.sh /path/to/old_airhub_real_dump.sql
+source .venv/bin/activate
+python scripts/sync_firestore.py
+```
+
+The recovery script starts the old MariaDB data directory in an isolated temporary socket/port and does not overwrite the current Airhub database.
