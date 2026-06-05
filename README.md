@@ -128,9 +128,12 @@ Old registrations stay active because NFC matching still uses the local MySQL `u
 
 The hosting app lives in `hosting/` and reads from Firestore collection `airhub_logs`. It does not show NFC codes.
 
-Deploy hosting and Firestore rules:
+Deploy hosting and Firestore rules. On Raspberry Pi, install Firebase CLI with npm, not pip:
 
 ```bash
+sudo apt-get install -y nodejs npm
+sudo npm install -g firebase-tools
+firebase login --no-localhost
 firebase deploy --only hosting,firestore:rules
 ```
 
