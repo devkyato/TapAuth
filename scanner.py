@@ -21,9 +21,7 @@ def find_acr122u_usb_port():
         for line in lsusb_output.splitlines():
             if "ACR122U" in line:
                 parts = line.split()
-                bus = parts[1]
-                device = parts[3].replace(":", "")
-                return f"{bus}:{device}"
+                return parts[1]
     except Exception as exc:
         print(f"[USB] lsusb error: {exc}")
     return None
@@ -136,12 +134,21 @@ class NFCStandbyReader:
                 time.sleep(1)
                 continue
 
-            device = f"acr122_usb:{port}"
-            self._set_connected(False, device=device)
+            device_candidates = [f"acr122_usb:{port}", "acr122_usb"]
+            self._set_connected(False, device=device_candidates[0])
 
             try:
                 self._set_error(None)
-                nfc = Nfc(device)
+                nfc = None
+                last_open_error = None
+                for device in device_candidates:
+                    try:
+                        nfc = Nfc(device)
+                        break
+                    except Exception as exc:
+                        last_open_error = exc
+                if nfc is None:
+                    raise last_open_error or RuntimeError("Unable to open ACR122U")
                 self._set_connected(True, device=device)
                 backoff = 1.0
 
