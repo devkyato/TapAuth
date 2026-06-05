@@ -148,3 +148,78 @@ bash scripts/export_database.sh
 ```
 
 Exports are written to `exports/`.
+## Where To View Data
+
+Local Raspberry Pi kiosk:
+
+```text
+http://127.0.0.1:5000/
+```
+
+Hidden registration dashboard:
+
+```text
+http://127.0.0.1:5000/airhub-register?code=airhub123
+```
+
+Local database/phpMyAdmin:
+
+```text
+http://127.0.0.1/phpmyadmin
+```
+
+Firebase Realtime Database:
+
+```text
+https://console.firebase.google.com/project/airhub-login/database/airhub-login-default-rtdb/data
+```
+
+Firebase Hosting deploy:
+
+```bash
+firebase deploy --only hosting,database
+```
+
+## Refresh After Pull
+
+On the Raspberry Pi after pulling GitHub:
+
+```bash
+cd /home/mako-airhub/loginsys_airhub
+git pull
+bash scripts/update_pi_from_github.sh
+sudo systemctl restart airhub.service
+```
+
+If NFC is not detected:
+
+```bash
+bash scripts/diagnose_nfc.sh
+sudo systemctl stop pcscd
+sudo systemctl disable pcscd
+sudo systemctl restart airhub.service
+```
+
+## Old Data Recovery From E Drive
+
+The original old MariaDB files were found at:
+
+```text
+E:\var\var\lib\mysql\airhub_db
+```
+
+Copy the raw folder made on the laptop to the Pi, then dump it:
+
+```bash
+bash scripts/dump_old_raw_mariadb.sh \
+  /home/mako-airhub/old_sql_export/mysql_raw_from_E_var_var_lib_mysql \
+  /home/mako-airhub/old_airhub_real_dump.sql
+```
+
+Merge into active MySQL/phpMyAdmin and upload to Realtime Database:
+
+```bash
+bash scripts/migrate_old_sql.sh /home/mako-airhub/old_airhub_real_dump.sql
+source .venv/bin/activate
+python scripts/sync_firestore.py
+```

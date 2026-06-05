@@ -26,6 +26,18 @@
             <p id="tapSubtext">Your time-in will be recorded automatically.</p>
         </section>
 
+        <section class="guest-panel" id="guestPanel" hidden>
+            <form id="guestForm" class="guest-form">
+                <input type="hidden" id="guestLogId" name="log_id">
+                <label>
+                    <span>Temporary Guest Name</span>
+                    <input type="text" id="guestName" name="guest_name" autocomplete="name" placeholder="Type your name" required>
+                </label>
+                <button class="primary-action" type="submit">Save Guest Tap</button>
+            </form>
+            <p id="guestMessage" class="message"></p>
+        </section>
+
         <section class="logs-panel tap-logs">
             <div class="logs-head">
                 <div>
@@ -64,6 +76,15 @@
 
         function updateClock() {
             $('#clock').text(new Date().toLocaleString());
+        }
+
+        function showGuestPrompt(logId) {
+            if (!logId) return;
+            $('#guestLogId').val(logId);
+            $('#guestName').val('');
+            $('#guestPanel').prop('hidden', false);
+            $('#guestMessage').removeClass('error success').text('Guest accepted. Please type your temporary login name.');
+            setTimeout(function() { $('#guestName').trigger('focus'); }, 50);
         }
 
         function showGreeting(message) {
@@ -114,9 +135,29 @@
                 if (!resp.changed) return;
                 tapCounter = resp.tap_counter;
                 showGreeting(resp.message || 'Tap recorded');
+                if ((resp.message || '').toLowerCase().includes('guest tap')) showGuestPrompt(resp.log_id);
                 fetchLogs();
             });
         }
+
+        $('#guestForm').on('submit', function(event) {
+            event.preventDefault();
+            $.ajax({
+                url: '/guest_name',
+                type: 'POST',
+                data: $(this).serialize(),
+                success: function(response) {
+                    $('#guestMessage').removeClass('error').addClass('success').text(response.message || 'Guest name saved.');
+                    $('#guestPanel').prop('hidden', true);
+                    showGreeting(response.message || 'Guest name saved.');
+                    fetchLogs();
+                },
+                error: function(xhr) {
+                    const response = xhr.responseJSON || {};
+                    $('#guestMessage').removeClass('success').addClass('error').text(response.error || 'Unable to save guest name.');
+                }
+            });
+        });
 
         $('#refreshLogs').on('click', fetchLogs);
         updateClock();

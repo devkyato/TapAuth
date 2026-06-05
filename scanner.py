@@ -43,6 +43,7 @@ class NFCStandbyReader:
         self._last_uid = None
         self._last_uid_time = 0.0
         self._last_message = None
+        self._last_log_id = None
         self._cooldown = {}
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -61,6 +62,7 @@ class NFCStandbyReader:
                 "last_message": self._last_message,
                 "tap_counter": self._tap_counter,
                 "last_error": self._last_error,
+                "last_log_id": self._last_log_id,
             }
 
     def latest_tap(self, since_counter):
@@ -71,6 +73,7 @@ class NFCStandbyReader:
                 "tap_counter": self._tap_counter,
                 "uid": self._last_uid,
                 "message": self._last_message,
+                "log_id": self._last_log_id,
             }
 
     def _set_error(self, message):
@@ -83,11 +86,12 @@ class NFCStandbyReader:
             if device is not None:
                 self._device_string = device
 
-    def _publish_tap(self, uid, message):
+    def _publish_tap(self, uid, message, log_id=None):
         with self._cond:
             self._last_uid = uid
             self._last_uid_time = time.time()
             self._last_message = message
+            self._last_log_id = log_id
             self._tap_counter += 1
             self._cond.notify_all()
 
@@ -102,14 +106,20 @@ class NFCStandbyReader:
             self._publish_tap(uid, self._last_message or f"NFC captured: {uid}")
             return
 
+        log_id = None
         try:
-            message = self.on_tap(uid)
+            result = self.on_tap(uid)
+            if isinstance(result, dict):
+                message = result.get("message", "Tap recorded")
+                log_id = result.get("log_id")
+            else:
+                message = result
             self._cooldown[uid] = now
         except Exception as exc:
             message = f"Log failed: {exc}"
             self._set_error(str(exc))
 
-        self._publish_tap(uid, message)
+        self._publish_tap(uid, message, log_id)
 
     def _run(self):
         if Nfc is None:

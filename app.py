@@ -4,24 +4,28 @@ from flask import Flask, jsonify, render_template, request
 from config import ACCESS_CONFIG, APP_CONFIG, WIFI_CONFIG
 from database import (
     create_user,
+    get_firebase_queue_count,
+    get_log_by_id,
     get_logs,
     get_user_fullname,
+    update_log_guest_name,
     insert_log,
     test_database_connection,
 )
 from scanner import NFCStandbyReader
-from firebase_adapter import sync_log, sync_user
+from sync_service import retry_pending, sync_log_or_queue, sync_user_or_queue
 
 app = Flask(__name__)
 
 
 def handle_tap(uid):
     log_record = insert_log(uid)
-    sync_log(log_record)
+    sync_log_or_queue(log_record)
+    retry_pending(limit=20)
     fullname = get_user_fullname(uid)
     if not fullname:
-        return "Please register your name."
-    return f"Hi, {fullname}!"
+        return {"message": "Guest tap recorded. Please type your temporary name.", "log_id": log_record.get("id")}
+    return {"message": f"Hi, {fullname}!", "log_id": log_record.get("id")}
 
 
 nfc_reader = NFCStandbyReader(on_tap=handle_tap)
@@ -124,11 +128,38 @@ def register():
             room=request.form["room"],
             nfc_code=request.form["nfc_code"],
         )
-        sync_user(user_record)
+        sync_user_or_queue(user_record)
+        retry_pending(limit=20)
         return jsonify({"success": True, "message": "Registration successful."})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
+
+
+@app.route("/guest_name", methods=["POST"])
+def guest_name():
+    payload = request.get_json(silent=True) or request.form
+    log_id = payload.get("log_id")
+    name = payload.get("guest_name")
+    if not log_id or not name:
+        return jsonify({"error": "Log ID and temporary name are required."}), 400
+    try:
+        log_record = update_log_guest_name(int(log_id), name)
+        sync_log_or_queue(log_record)
+        retry_pending(limit=20)
+        return jsonify({"success": True, "message": f"Welcome, {name.strip()}!", "log": log_record})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/firebase_sync_status")
+def firebase_sync_status():
+    return jsonify(get_firebase_queue_count())
+
+
+@app.route("/retry_firebase_sync", methods=["POST"])
+def retry_firebase_sync():
+    return jsonify(retry_pending(limit=200))
 
 @app.route("/user_logs_info")
 def user_logs_info():
@@ -139,4 +170,4 @@ def user_logs_info():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=APP_CONFIG.get("debug", False))

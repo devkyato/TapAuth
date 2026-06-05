@@ -4,60 +4,59 @@ from config import FIREBASE_CONFIG
 
 try:
     import firebase_admin
-    from firebase_admin import credentials, firestore
+    from firebase_admin import credentials, db
 except ImportError:
     firebase_admin = None
     credentials = None
-    firestore = None
+    db = None
 
-_client = None
+_app_ready = False
 
 
 def firebase_is_configured():
     return (
         FIREBASE_CONFIG["enabled"]
-        and FIREBASE_CONFIG["mode"] == "firestore"
+        and FIREBASE_CONFIG["mode"] == "realtime_db"
+        and bool(FIREBASE_CONFIG["database_url"])
         and bool(FIREBASE_CONFIG["credentials_path"])
-        and bool(FIREBASE_CONFIG["project_id"])
         and firebase_admin is not None
     )
 
 
-def get_client():
-    global _client
-    if _client is not None:
-        return _client
+def init_firebase():
+    global _app_ready
+    if _app_ready:
+        return True
     if not firebase_is_configured():
-        return None
-
+        return False
     if not firebase_admin._apps:
         cred = credentials.Certificate(FIREBASE_CONFIG["credentials_path"])
-        firebase_admin.initialize_app(cred, {"projectId": FIREBASE_CONFIG["project_id"]})
-    _client = firestore.client()
-    return _client
+        firebase_admin.initialize_app(cred, {
+            "databaseURL": FIREBASE_CONFIG["database_url"],
+            "projectId": FIREBASE_CONFIG["project_id"],
+        })
+    _app_ready = True
+    return True
 
 
-def firestore_safe(value):
+def rtdb_safe(value):
     if isinstance(value, datetime):
         if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value
+            value = value.replace(tzinfo=timezone.utc)
+        return value.isoformat()
     return value
 
 
 def public_log_payload(log_record):
-    fullname = log_record.get("fullname") or "Name required"
-    status = log_record.get("status") or "GUEST"
-    if status == "GUEST" and fullname.lower() == "guest":
-        fullname = "Name required"
-
+    fullname = log_record.get("fullname") or "Guest"
+    status = log_record.get("status") or "GUEST_PENDING"
     return {
         "local_id": log_record.get("id"),
         "fullname": fullname,
         "status": status,
-        "date_logged": firestore_safe(log_record.get("date_logged")),
+        "date_logged": rtdb_safe(log_record.get("date_logged")),
         "source": "raspberry_pi",
-        "updated_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -72,71 +71,45 @@ def user_payload(user_record):
         "course": user_record.get("course"),
         "project_type": user_record.get("project_type"),
         "room": user_record.get("room"),
-        "created_at": firestore_safe(user_record.get("created_at")),
-        "updated_at": firestore_safe(user_record.get("updated_at")),
-        "synced_at": datetime.now(timezone.utc),
+        "created_at": rtdb_safe(user_record.get("created_at")),
+        "updated_at": rtdb_safe(user_record.get("updated_at")),
+        "synced_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
 def sync_log(log_record):
     try:
-        client = get_client()
-        if client is None or not log_record:
-            return {"synced": False, "reason": "Firestore is not enabled/configured."}
-
+        if not init_firebase() or not log_record:
+            return {"synced": False, "reason": "Realtime Database is not enabled/configured."}
         doc_id = str(log_record.get("id"))
-        client.collection("airhub_logs").document(doc_id).set(public_log_payload(log_record), merge=True)
-        return {"synced": True, "collection": "airhub_logs", "id": doc_id}
+        db.reference(f"airhub/logs/{doc_id}").set(public_log_payload(log_record))
+        return {"synced": True, "path": f"airhub/logs/{doc_id}", "id": doc_id}
     except Exception as exc:
         return {"synced": False, "reason": str(exc)}
 
 
 def sync_user(user_record):
     try:
-        client = get_client()
-        if client is None or not user_record:
-            return {"synced": False, "reason": "Firestore is not enabled/configured."}
-
+        if not init_firebase() or not user_record:
+            return {"synced": False, "reason": "Realtime Database is not enabled/configured."}
         doc_id = str(user_record.get("id"))
-        client.collection("airhub_users").document(doc_id).set(user_payload(user_record), merge=True)
-        return {"synced": True, "collection": "airhub_users", "id": doc_id}
+        db.reference(f"airhub/users/{doc_id}").set(user_payload(user_record))
+        return {"synced": True, "path": f"airhub/users/{doc_id}", "id": doc_id}
     except Exception as exc:
         return {"synced": False, "reason": str(exc)}
 
 
 def sync_all(users, logs):
     try:
-        client = get_client()
-        if client is None:
-            return {"synced": False, "reason": "Firestore is not enabled/configured."}
-
-        user_count = 0
-        log_count = 0
-        batch = client.batch()
-        pending = 0
-
-        def flush_if_needed(force=False):
-            nonlocal batch, pending
-            if pending >= 400 or (force and pending):
-                batch.commit()
-                batch = client.batch()
-                pending = 0
-
+        if not init_firebase():
+            return {"synced": False, "reason": "Realtime Database is not enabled/configured."}
+        updates = {}
         for user in users:
-            ref = client.collection("airhub_users").document(str(user.get("id")))
-            batch.set(ref, user_payload(user), merge=True)
-            user_count += 1
-            pending += 1
-            flush_if_needed()
-
+            updates[f"airhub/users/{user.get('id')}"] = user_payload(user)
         for log in logs:
-            ref = client.collection("airhub_logs").document(str(log.get("id")))
-            batch.set(ref, public_log_payload(log), merge=True)
-            log_count += 1
-            pending += 1
-            flush_if_needed()
-
-        flush_if_needed(force=True)
-        return {"synced": True, "users": user_count, "logs": log_count}
+            updates[f"airhub/logs/{log.get('id')}"] = public_log_payload(log)
+        if updates:
+            db.reference("/").update(updates)
+        return {"synced": True, "users": len(users), "logs": len(logs)}
     except Exception as exc:
         return {"synced": False, "reason": str(exc)}
