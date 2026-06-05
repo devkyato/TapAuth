@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APC Airhub Registration</title>
+    <link rel="stylesheet" href="/static/app.css">
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+</head>
+<body>
+    <main class="shell">
+        <header class="topbar">
+            <a class="brand" href="/">
+                <img src="/static/apc_logo.png" alt="Asia Pacific College School of Engineering">
+                <span>
+                    <strong>APC Airhub</strong>
+                    <small>NFC Access Registration</small>
+                </span>
+            </a>
+            <nav class="nav">
+                <a class="active" href="/">Register</a>
+                <a href="/login">Logs</a>
+            </nav>
+        </header>
+
+        <section class="status-strip" aria-live="polite">
+            <div>
+                <span class="label">Reader</span>
+                <strong id="readerStatus">Checking...</strong>
+            </div>
+            <div>
+                <span class="label">Database</span>
+                <strong id="databaseStatus">Checking...</strong>
+            </div>
+            <div>
+                <span class="label">Network</span>
+                <strong id="wifiStatus">Configured locally</strong>
+            </div>
+        </section>
+
+        <section class="workspace two-column">
+            <div class="panel">
+                <div class="panel-head">
+                    <p class="eyebrow">Current Tap</p>
+                    <h1>Scan card, then register profile.</h1>
+                </div>
+                <div class="scan-card">
+                    <span class="pulse"></span>
+                    <div>
+                        <span class="label">NFC Code</span>
+                        <strong id="scanPreview">Waiting for card</strong>
+                    </div>
+                </div>
+                <p id="formMessage" class="message"></p>
+            </div>
+
+            <form class="panel form-grid" id="registrationForm" action="/register" method="post">
+                <label>
+                    <span>Student/Employee No.</span>
+                    <input type="text" id="student_no" name="student_no" autocomplete="off" required>
+                </label>
+                <label>
+                    <span>Last Name</span>
+                    <input type="text" id="lastname" name="lastname" autocomplete="family-name" required>
+                </label>
+                <label>
+                    <span>First Name</span>
+                    <input type="text" id="firstname" name="firstname" autocomplete="given-name" required>
+                </label>
+                <label>
+                    <span>Middle Name</span>
+                    <input type="text" id="middlename" name="middlename" autocomplete="additional-name">
+                </label>
+                <label>
+                    <span>Program</span>
+                    <input type="text" id="course" name="course" placeholder="BSECE, BSCPE, FACULTY" required>
+                </label>
+                <label>
+                    <span>Project Type</span>
+                    <input type="text" id="project_type" name="project_type" placeholder="PBL or FACULTY" required>
+                </label>
+                <label>
+                    <span>Room</span>
+                    <input type="text" id="room" name="room" required>
+                </label>
+                <label>
+                    <span>NFC Code</span>
+                    <input type="text" id="nfc_code" name="nfc_code" readonly required>
+                </label>
+                <button class="primary-action" type="submit">Register Card</button>
+            </form>
+        </section>
+    </main>
+
+    <script>
+        let tapCounter = 0;
+
+        function setMessage(text, type) {
+            $('#formMessage').removeClass('success error').addClass(type || '').text(text || '');
+        }
+
+        function refreshStatus() {
+            $.getJSON('/system_status', function(data) {
+                $('#readerStatus').text(data.scanner.connected ? 'Connected' : 'Standby');
+                $('#databaseStatus').text(data.database.connected ? 'Local MySQL' : 'Needs setup');
+                $('#wifiStatus').text(data.wifi.ssid || 'Not configured');
+            });
+        }
+
+        function pollLatestTap() {
+            $.getJSON('/latest_tap?since=' + tapCounter, function(resp) {
+                if (!resp.changed) {
+                    return;
+                }
+                tapCounter = resp.tap_counter;
+                $('#nfc_code').val(resp.uid || '');
+                $('#scanPreview').text(resp.uid || 'Waiting for card');
+                setMessage('Card captured. Complete the profile and register.', 'success');
+            });
+        }
+
+        $('#registrationForm').on('submit', function(event) {
+            event.preventDefault();
+            $.ajax({
+                type: 'POST',
+                url: '/register',
+                data: $(this).serialize(),
+                success: function(response) {
+                    setMessage(response.message || 'Registration successful.', 'success');
+                    $('#registrationForm')[0].reset();
+                    $('#scanPreview').text('Waiting for card');
+                },
+                error: function(xhr) {
+                    const response = xhr.responseJSON || {};
+                    setMessage(response.error || 'Registration failed.', 'error');
+                }
+            });
+        });
+
+        refreshStatus();
+        setInterval(refreshStatus, 5000);
+        setInterval(pollLatestTap, 500);
+    </script>
+</body>
+</html>

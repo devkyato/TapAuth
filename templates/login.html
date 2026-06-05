@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APC Airhub Logs</title>
+    <link rel="stylesheet" href="/static/app.css">
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+</head>
+<body>
+    <main class="shell">
+        <header class="topbar">
+            <a class="brand" href="/">
+                <img src="/static/apc_logo.png" alt="Asia Pacific College School of Engineering">
+                <span>
+                    <strong>APC Airhub</strong>
+                    <small>NFC Access Logs</small>
+                </span>
+            </a>
+            <nav class="nav">
+                <a href="/">Register</a>
+                <a class="active" href="/login">Logs</a>
+            </nav>
+        </header>
+
+        <section class="status-strip" aria-live="polite">
+            <div>
+                <span class="label">Reader</span>
+                <strong id="readerStatus">Checking...</strong>
+            </div>
+            <div>
+                <span class="label">Database</span>
+                <strong id="databaseStatus">Checking...</strong>
+            </div>
+            <div>
+                <span class="label">Time</span>
+                <strong id="clock">--:--</strong>
+            </div>
+        </section>
+
+        <section class="workspace">
+            <div class="panel log-hero">
+                <div>
+                    <p class="eyebrow">Live NFC Greeting</p>
+                    <h1 id="tapMessage">Waiting for a card tap.</h1>
+                </div>
+                <div class="scan-card compact">
+                    <span class="pulse"></span>
+                    <div>
+                        <span class="label">Last UID</span>
+                        <strong id="lastUid">None yet</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-head row">
+                    <div>
+                        <p class="eyebrow">Local MySQL via phpMyAdmin</p>
+                        <h2>Recent Logs</h2>
+                    </div>
+                    <button class="secondary-action" type="button" id="refreshLogs">Refresh</button>
+                </div>
+                <div class="table-wrap">
+                    <table class="logs-table">
+                        <thead>
+                            <tr>
+                                <th>Full Name</th>
+                                <th>NFC Code</th>
+                                <th>Date Logged</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logsBody">
+                            <tr>
+                                <td colspan="4">Loading logs...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p id="logsMessage" class="message"></p>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        let tapCounter = 0;
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, function(char) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#039;'
+                }[char];
+            });
+        }
+
+        function updateClock() {
+            $('#clock').text(new Date().toLocaleString());
+        }
+
+        function refreshStatus() {
+            $.getJSON('/system_status', function(data) {
+                $('#readerStatus').text(data.scanner.connected ? 'Connected' : 'Standby');
+                $('#databaseStatus').text(data.database.connected ? 'Local MySQL' : 'Needs setup');
+            });
+        }
+
+        function renderLogs(rows) {
+            if (!Array.isArray(rows) || rows.length === 0) {
+                $('#logsBody').html('<tr><td colspan="4">No logs yet.</td></tr>');
+                return;
+            }
+
+            const html = rows.slice(0, 50).map(function(row) {
+                return `
+                    <tr>
+                        <td>${escapeHtml(row.fullname)}</td>
+                        <td><code>${escapeHtml(row.nfc_code)}</code></td>
+                        <td>${escapeHtml(row.date_logged)}</td>
+                        <td><span class="status-pill">${escapeHtml(row.status)}</span></td>
+                    </tr>
+                `;
+            }).join('');
+            $('#logsBody').html(html);
+        }
+
+        function fetchLogs() {
+            $.ajax({
+                url: '/user_logs_info',
+                type: 'GET',
+                success: function(data) {
+                    renderLogs(data);
+                    $('#logsMessage').removeClass('error').text('');
+                },
+                error: function(xhr) {
+                    const response = xhr.responseJSON || {};
+                    $('#logsMessage').addClass('error').text(response.error || 'Unable to load logs.');
+                }
+            });
+        }
+
+        function pollLatestTap() {
+            $.getJSON('/latest_tap?since=' + tapCounter, function(resp) {
+                if (!resp.changed) {
+                    return;
+                }
+                tapCounter = resp.tap_counter;
+                $('#tapMessage').text(resp.message || 'Card captured.');
+                $('#lastUid').text(resp.uid || 'None yet');
+                fetchLogs();
+            });
+        }
+
+        $('#refreshLogs').on('click', fetchLogs);
+
+        updateClock();
+        refreshStatus();
+        fetchLogs();
+        setInterval(updateClock, 1000);
+        setInterval(refreshStatus, 5000);
+        setInterval(pollLatestTap, 400);
+    </script>
+</body>
+</html>
