@@ -58,6 +58,9 @@ sudo apt-get install -y \
   pcscd \
   pcsc-tools
 
+sudo timedatectl set-ntp true || true
+sudo systemctl restart systemd-timesyncd || true
+
 python3 -m venv "$PROJECT_DIR/.venv"
 "$PROJECT_DIR/.venv/bin/pip" install --upgrade pip
 "$PROJECT_DIR/.venv/bin/pip" install -r "$PROJECT_DIR/requirements.txt"
