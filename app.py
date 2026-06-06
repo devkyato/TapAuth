@@ -11,7 +11,6 @@ from database import (
     get_log_by_id,
     get_logs,
     get_user_fullname,
-    update_log_guest_name,
     insert_log,
     test_database_connection,
 )
@@ -52,8 +51,8 @@ def handle_tap(uid):
     log_record = insert_log(uid)
     enqueue_sync("log", log_record)
     fullname = log_record.get("fullname") if log_record else get_user_fullname(uid)
-    if not fullname:
-        return {"message": "Guest tap recorded. Please type your temporary name.", "log_id": log_record.get("id")}
+    if not fullname or (log_record and str(log_record.get("status", "")).startswith("GUEST")):
+        return {"message": "Guest tap recorded.", "log_id": log_record.get("id")}
     tap_label = "Tap out" if log_record.get("status") == "TAP_OUT" else "Tap in"
     return {"message": f"{tap_label}: {fullname}", "log_id": log_record.get("id")}
 
@@ -168,23 +167,6 @@ def register():
         return jsonify({"success": True, "message": "Registration successful."})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
-
-
-
-@app.route("/guest_name", methods=["POST"])
-def guest_name():
-    payload = request.get_json(silent=True) or request.form
-    log_id = payload.get("log_id")
-    name = payload.get("guest_name")
-    if not log_id or not name:
-        return jsonify({"error": "Log ID and temporary name are required."}), 400
-    try:
-        log_record = update_log_guest_name(int(log_id), name)
-        enqueue_sync("log", log_record)
-        return jsonify({"success": True, "message": f"Welcome, {name.strip()}!", "log": log_record})
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
-
 
 @app.route("/firebase_sync_status")
 def firebase_sync_status():
