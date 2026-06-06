@@ -54,6 +54,9 @@
     <script>
         let tapCounter = 0;
         let greetingTimer = null;
+        let lastLogsKey = '';
+        let latestTapBusy = false;
+        let logsBusy = false;
         const $ = (selector) => document.querySelector(selector);
 
         function escapeHtml(value) {
@@ -63,7 +66,7 @@
         }
 
         function updateClock() {
-            $('#clock').textContent = new Date().toLocaleString();
+            $('#clock').textContent = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
         }
 
         function showGreeting(message) {
@@ -84,10 +87,17 @@
 
         function renderLogs(rows) {
             if (!Array.isArray(rows) || rows.length === 0) {
-                $('#logsBody').innerHTML = '<tr><td colspan="7">No logs yet.</td></tr>';
+                if (lastLogsKey !== 'empty') {
+                    $('#logsBody').innerHTML = '<tr><td colspan="7">No logs yet.</td></tr>';
+                    lastLogsKey = 'empty';
+                }
                 return;
             }
-            const html = rows.slice(0, 8).map(function(row) {
+            const visibleRows = rows.slice(0, 6);
+            const nextKey = visibleRows.map((row) => row.id + ':' + row.status + ':' + (row.duration_label || '')).join('|');
+            if (nextKey === lastLogsKey) return;
+            lastLogsKey = nextKey;
+            const html = visibleRows.map(function(row) {
                 return `<tr>
                     <td><span class="status-pill">${escapeHtml(row.event_type)}</span></td>
                     <td>${escapeHtml(row.lastname)}</td>
@@ -102,6 +112,8 @@
         }
 
         function fetchLogs() {
+            if (logsBusy) return;
+            logsBusy = true;
             fetch('/user_logs_info')
                 .then((response) => response.ok ? response.json() : Promise.reject(response))
                 .then((data) => {
@@ -112,10 +124,13 @@
                 .catch(() => {
                     $('#logsMessage').className = 'message error';
                     $('#logsMessage').textContent = 'Unable to load logs.';
-                });
+                })
+                .finally(() => { logsBusy = false; });
         }
 
         function pollLatestTap() {
+            if (latestTapBusy) return;
+            latestTapBusy = true;
             fetch('/latest_tap?since=' + tapCounter)
                 .then((response) => response.json())
                 .then((resp) => {
@@ -123,14 +138,16 @@
                 tapCounter = resp.tap_counter;
                 showGreeting(resp.message || 'Tap recorded');
                 fetchLogs();
-            });
+            })
+                .catch(() => {})
+                .finally(() => { latestTapBusy = false; });
         }
 
         $('#refreshLogs').addEventListener('click', fetchLogs);
         updateClock();
         fetchLogs();
-        setInterval(updateClock, 1000);
-        setInterval(pollLatestTap, 900);
+        setInterval(updateClock, 15000);
+        setInterval(pollLatestTap, 1200);
     </script>
 </body>
 </html>
