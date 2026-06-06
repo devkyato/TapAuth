@@ -128,6 +128,18 @@ source .venv/bin/activate
 python scripts/sync_firestore.py
 ```
 
+If Firebase prints `Invalid JWT Signature`, first sync the Raspberry Pi clock and then run the Firebase diagnostic:
+
+```bash
+sudo timedatectl set-ntp true
+sudo systemctl restart systemd-timesyncd
+timedatectl
+source .venv/bin/activate
+python scripts/diagnose_firebase.py
+```
+
+If the diagnostic still reports `Invalid JWT Signature` after NTP is synchronized, download a fresh Firebase Admin SDK service-account JSON from the `airhub-login` Firebase project and replace the file pointed to by `GOOGLE_APPLICATION_CREDENTIALS`.
+
 Old registrations stay active because NFC matching still uses the local MySQL `users.nfc_code` field. Import old data before registering new cards so previously registered cards are recognized immediately by the kiosk.
 
 ## Firebase Hosting

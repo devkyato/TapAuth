@@ -28,6 +28,18 @@ cd "$PROJECT_DIR"
 git fetch origin main
 git pull --ff-only origin main
 
+sudo timedatectl set-ntp true || true
+sudo systemctl restart systemd-timesyncd || true
+for _ in 1 2 3 4 5; do
+  if timedatectl show -p NTPSynchronized --value 2>/dev/null | grep -q yes; then
+    break
+  fi
+  sleep 2
+done
+if ! timedatectl show -p NTPSynchronized --value 2>/dev/null | grep -q yes; then
+  echo "Warning: system clock is not NTP synchronized yet. Firebase may reject JWT auth until time sync completes."
+fi
+
 if [[ -d ".venv" ]]; then
   .venv/bin/pip install -r requirements.txt
 else

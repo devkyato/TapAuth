@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from datetime import datetime, timezone
 
 from config import FIREBASE_CONFIG
@@ -64,16 +66,62 @@ def get_firestore_client():
 
 
 def firebase_status():
+    credentials_path = FIREBASE_CONFIG["credentials_path"]
+    credentials_info = inspect_credentials_file(credentials_path)
     return {
         "enabled": FIREBASE_CONFIG["enabled"],
         "mode": FIREBASE_CONFIG["mode"],
         "project_id_configured": bool(FIREBASE_CONFIG["project_id"]),
         "database_url_configured": bool(FIREBASE_CONFIG["database_url"]),
-        "credentials_path_configured": bool(FIREBASE_CONFIG["credentials_path"]),
+        "credentials_path_configured": bool(credentials_path),
+        "credentials_file_exists": credentials_info["exists"],
+        "credentials_project_id": credentials_info["project_id"],
+        "credentials_client_email": credentials_info["client_email"],
+        "credentials_private_key_id_present": credentials_info["private_key_id_present"],
+        "credentials_private_key_present": credentials_info["private_key_present"],
         "admin_sdk_importable": firebase_admin is not None,
         "realtime_database_target": realtime_database_enabled(),
         "firestore_target": firestore_enabled(),
     }
+
+
+def inspect_credentials_file(credentials_path):
+    info = {
+        "exists": False,
+        "project_id": None,
+        "client_email": None,
+        "private_key_id_present": False,
+        "private_key_present": False,
+        "error": None,
+    }
+    if not credentials_path:
+        return info
+    path = Path(credentials_path)
+    info["exists"] = path.exists()
+    if not path.exists():
+        return info
+    try:
+        data = json.loads(path.read_text())
+        info["project_id"] = data.get("project_id")
+        info["client_email"] = data.get("client_email")
+        info["private_key_id_present"] = bool(data.get("private_key_id"))
+        info["private_key_present"] = bool(data.get("private_key"))
+    except Exception as exc:
+        info["error"] = str(exc)
+    return info
+
+
+def firebase_error_hint(error):
+    message = str(error)
+    if "Invalid JWT Signature" in message:
+        return (
+            "Firebase rejected the service account JWT signature. Check that the Raspberry Pi clock is synced "
+            "with NTP, then replace GOOGLE_APPLICATION_CREDENTIALS with a freshly downloaded service-account "
+            "JSON key from the Firebase project if the error continues."
+        )
+    if "No such file" in message or "could not be found" in message:
+        return "Firebase service account JSON was not found at GOOGLE_APPLICATION_CREDENTIALS."
+    return None
 
 
 def rtdb_safe(value):
@@ -132,7 +180,7 @@ def sync_log(log_record):
             return {"synced": False, "reason": "No Firebase database target is enabled."}
         return {"synced": True, "paths": targets, "id": doc_id}
     except Exception as exc:
-        return {"synced": False, "reason": str(exc)}
+        return {"synced": False, "reason": str(exc), "hint": firebase_error_hint(exc)}
 
 
 def sync_user(user_record):
@@ -152,7 +200,7 @@ def sync_user(user_record):
             return {"synced": False, "reason": "No Firebase database target is enabled."}
         return {"synced": True, "paths": targets, "id": doc_id}
     except Exception as exc:
-        return {"synced": False, "reason": str(exc)}
+        return {"synced": False, "reason": str(exc), "hint": firebase_error_hint(exc)}
 
 
 def sync_all(users, logs):
@@ -196,4 +244,4 @@ def sync_all(users, logs):
             return {"synced": False, "reason": "No Firebase database target is enabled."}
         return {"synced": True, "users": len(users), "logs": len(logs), "targets": targets}
     except Exception as exc:
-        return {"synced": False, "reason": str(exc)}
+        return {"synced": False, "reason": str(exc), "hint": firebase_error_hint(exc)}
