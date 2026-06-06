@@ -31,6 +31,13 @@ Then upload all active MySQL data to Realtime Database:
 source .venv/bin/activate
 python scripts/sync_realtime_db.py
 ```
+
+If the old raw MariaDB folder exists next to this repo in `old_sql_export/mysql_raw_from_E_var_var_lib_mysql`, recover, import, and sync in one command on the Raspberry Pi/Linux machine:
+
+```bash
+cd /home/mako-airhub/loginsys_airhub
+bash scripts/recover_import_old_data.sh /home/mako-airhub/old_sql_export/mysql_raw_from_E_var_var_lib_mysql
+```
 ## Dump Raw MariaDB Files To Real SQL
 
 If the old raw MariaDB folder is available on a Raspberry Pi/Linux machine, create a real SQL dump with:

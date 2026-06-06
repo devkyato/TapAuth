@@ -34,17 +34,26 @@ mysql "${MYSQL_AUTH[@]}" -e "CREATE DATABASE \`$LEGACY_DB\` CHARACTER SET utf8mb
 mysql "${MYSQL_AUTH[@]}" "$LEGACY_DB" < "$OLD_SQL"
 
 mysql "${MYSQL_AUTH[@]}" <<SQL
+ALTER TABLE \`$LEGACY_DB\`.users ADD COLUMN IF NOT EXISTS middlename VARCHAR(100) NOT NULL DEFAULT '';
+ALTER TABLE \`$LEGACY_DB\`.users ADD COLUMN IF NOT EXISTS fullname VARCHAR(255) NOT NULL DEFAULT '';
+ALTER TABLE \`$LEGACY_DB\`.users ADD COLUMN IF NOT EXISTS course VARCHAR(100) NOT NULL DEFAULT '';
+ALTER TABLE \`$LEGACY_DB\`.users ADD COLUMN IF NOT EXISTS project_type VARCHAR(100) NOT NULL DEFAULT '';
+ALTER TABLE \`$LEGACY_DB\`.users ADD COLUMN IF NOT EXISTS room VARCHAR(100) NOT NULL DEFAULT '';
+ALTER TABLE \`$LEGACY_DB\`.users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE \`$LEGACY_DB\`.users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE \`$LEGACY_DB\`.user_logs ADD COLUMN IF NOT EXISTS date_logged TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
 INSERT INTO \`$DB_NAME\`.users
 (student_no, lastname, firstname, middlename, fullname, course, project_type, room, nfc_code, created_at, updated_at)
 SELECT
-  student_no,
-  lastname,
-  firstname,
+  COALESCE(NULLIF(student_no, ''), CONCAT('OLD-', id)),
+  COALESCE(lastname, ''),
+  COALESCE(firstname, ''),
   COALESCE(middlename, ''),
-  fullname,
-  course,
-  project_type,
-  room,
+  COALESCE(NULLIF(fullname, ''), TRIM(CONCAT(COALESCE(firstname, ''), ' ', COALESCE(middlename, ''), ' ', COALESCE(lastname, '')))),
+  COALESCE(course, ''),
+  COALESCE(project_type, ''),
+  COALESCE(room, ''),
   nfc_code,
   COALESCE(created_at, CURRENT_TIMESTAMP),
   COALESCE(updated_at, CURRENT_TIMESTAMP)

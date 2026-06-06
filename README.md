@@ -130,6 +130,13 @@ Import the old SQL without wiping current data:
 bash scripts/migrate_old_sql.sh /path/to/old_airhub.sql
 ```
 
+If you copied the old raw MariaDB folder, recover the real dump, merge it into the new database, and sync Realtime Database in one command:
+
+```bash
+cd /home/mako-airhub/loginsys_airhub
+bash scripts/recover_import_old_data.sh /home/mako-airhub/old_sql_export/mysql_raw_from_E_var_var_lib_mysql
+```
+
 Then copy all current MySQL users/logs to Realtime Database:
 
 ```bash
