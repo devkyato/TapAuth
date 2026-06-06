@@ -18,19 +18,7 @@
         <section class="tap-stage" aria-live="polite">
             <p class="tap-kicker">Tap your NFC card</p>
             <h2 id="tapMessage">Ready for tap-in</h2>
-            <p id="tapSubtext">Your time-in will be recorded automatically.</p>
-        </section>
-
-        <section class="guest-panel" id="guestPanel" hidden>
-            <form id="guestForm" class="guest-form">
-                <input type="hidden" id="guestLogId" name="log_id">
-                <label>
-                    <span>Temporary Guest Name</span>
-                    <input type="text" id="guestName" name="guest_name" autocomplete="name" placeholder="Type your name" required>
-                </label>
-                <button class="primary-action" type="submit">Save Guest Tap</button>
-            </form>
-            <p id="guestMessage" class="message"></p>
+            <p id="tapSubtext">Your tap-in or tap-out will be recorded automatically.</p>
         </section>
 
         <section class="logs-panel tap-logs">
@@ -72,16 +60,6 @@
 
         function updateClock() {
             $('#clock').textContent = new Date().toLocaleString();
-        }
-
-        function showGuestPrompt(logId) {
-            if (!logId) return;
-            $('#guestLogId').value = logId;
-            $('#guestName').value = '';
-            $('#guestPanel').hidden = false;
-            $('#guestMessage').className = 'message';
-            $('#guestMessage').textContent = 'Guest accepted. Please type your temporary login name.';
-            setTimeout(function() { $('#guestName').focus(); }, 50);
         }
 
         function showGreeting(message) {
@@ -136,30 +114,9 @@
                 if (!resp.changed) return;
                 tapCounter = resp.tap_counter;
                 showGreeting(resp.message || 'Tap recorded');
-                if ((resp.message || '').toLowerCase().includes('guest tap')) showGuestPrompt(resp.log_id);
                 fetchLogs();
             });
         }
-
-        $('#guestForm').addEventListener('submit', function(event) {
-            event.preventDefault();
-            fetch('/guest_name', {
-                method: 'POST',
-                body: new FormData(this),
-            })
-                .then((response) => response.ok ? response.json() : response.json().then((data) => Promise.reject(data)))
-                .then((response) => {
-                    $('#guestMessage').className = 'message success';
-                    $('#guestMessage').textContent = response.message || 'Guest name saved.';
-                    $('#guestPanel').hidden = true;
-                    showGreeting(response.message || 'Guest name saved.');
-                    fetchLogs();
-                })
-                .catch((response) => {
-                    $('#guestMessage').className = 'message error';
-                    $('#guestMessage').textContent = response.error || 'Unable to save guest name.';
-                });
-        });
 
         $('#refreshLogs').addEventListener('click', fetchLogs);
         updateClock();

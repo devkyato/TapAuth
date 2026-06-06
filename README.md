@@ -83,6 +83,15 @@ AIRHUB_DB_PASSWORD=<your_mysql_password>
 
 Do not commit `.env`. The setup scripts create the database/user if they do not exist.
 
+The app is intentionally compatible with the old core database shape:
+
+```text
+users: id, student_no, lastname, firstname, middlename, fullname, course, project_type, room, nfc_code, created_at
+user_logs: id, nfc_code, date_logged
+```
+
+Tap-in/tap-out status is calculated from the order of taps per card per day, so no extra `tap_type` column is required.
+
 ## Auto-Run On Power-On
 
 `bash scripts/setup_raspberry_pi.sh` installs `airhub.service` as a systemd service:

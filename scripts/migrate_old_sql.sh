@@ -40,11 +40,10 @@ ALTER TABLE \`$LEGACY_DB\`.users ADD COLUMN IF NOT EXISTS course VARCHAR(100) NO
 ALTER TABLE \`$LEGACY_DB\`.users ADD COLUMN IF NOT EXISTS project_type VARCHAR(100) NOT NULL DEFAULT '';
 ALTER TABLE \`$LEGACY_DB\`.users ADD COLUMN IF NOT EXISTS room VARCHAR(100) NOT NULL DEFAULT '';
 ALTER TABLE \`$LEGACY_DB\`.users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
-ALTER TABLE \`$LEGACY_DB\`.users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE \`$LEGACY_DB\`.user_logs ADD COLUMN IF NOT EXISTS date_logged TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
 INSERT INTO \`$DB_NAME\`.users
-(student_no, lastname, firstname, middlename, fullname, course, project_type, room, nfc_code, created_at, updated_at)
+(student_no, lastname, firstname, middlename, fullname, course, project_type, room, nfc_code, created_at)
 SELECT
   COALESCE(NULLIF(student_no, ''), CONCAT('OLD-', id)),
   COALESCE(lastname, ''),
@@ -55,8 +54,7 @@ SELECT
   COALESCE(project_type, ''),
   COALESCE(room, ''),
   nfc_code,
-  COALESCE(created_at, CURRENT_TIMESTAMP),
-  COALESCE(updated_at, CURRENT_TIMESTAMP)
+  COALESCE(created_at, CURRENT_TIMESTAMP)
 FROM \`$LEGACY_DB\`.users
 WHERE nfc_code IS NOT NULL AND nfc_code <> ''
 ON DUPLICATE KEY UPDATE
@@ -67,11 +65,10 @@ ON DUPLICATE KEY UPDATE
   fullname=VALUES(fullname),
   course=VALUES(course),
   project_type=VALUES(project_type),
-  room=VALUES(room),
-  updated_at=VALUES(updated_at);
+  room=VALUES(room);
 
-INSERT INTO \`$DB_NAME\`.user_logs (nfc_code, date_logged, source)
-SELECT l.nfc_code, l.date_logged, 'legacy'
+INSERT INTO \`$DB_NAME\`.user_logs (nfc_code, date_logged)
+SELECT l.nfc_code, l.date_logged
 FROM \`$LEGACY_DB\`.user_logs l
 WHERE l.nfc_code IS NOT NULL AND l.nfc_code <> ''
   AND NOT EXISTS (

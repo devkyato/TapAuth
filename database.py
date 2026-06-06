@@ -3,6 +3,21 @@ import mysql.connector
 from config import MYSQL_CONFIG
 
 
+USER_COLUMNS = (
+    "id",
+    "student_no",
+    "lastname",
+    "firstname",
+    "middlename",
+    "fullname",
+    "course",
+    "project_type",
+    "room",
+    "nfc_code",
+    "created_at",
+)
+
+
 def get_connection():
     return mysql.connector.connect(**MYSQL_CONFIG)
 
@@ -30,10 +45,14 @@ def test_database_connection():
             "error": str(exc),
         }
     finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
+        close(cursor, conn)
+
+
+def close(cursor=None, conn=None):
+    if cursor:
+        cursor.close()
+    if conn and conn.is_connected():
+        conn.close()
 
 
 def normalize(value):
@@ -79,49 +98,21 @@ def create_user(student_no, lastname, firstname, middlename, course, project_typ
         conn.commit()
         return get_user_by_nfc(nfc_code)
     finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
+        close(cursor, conn)
 
 
-def get_next_tap_type(cursor, nfc_code):
-    cursor.execute(
-        """
-        SELECT tap_type
-        FROM user_logs
-        WHERE nfc_code=%s
-          AND date_logged >= CURDATE()
-          AND date_logged < CURDATE() + INTERVAL 1 DAY
-        ORDER BY date_logged DESC, id DESC
-        LIMIT 1
-        """,
-        (nfc_code,),
-    )
-    row = cursor.fetchone()
-    last_tap_type = row[0] if row else None
-    return "TAP_OUT" if last_tap_type == "TAP_IN" else "TAP_IN"
-
-
-def insert_log(nfc_code, guest_name=None):
+def insert_log(nfc_code):
     conn = None
     cursor = None
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        tap_type = get_next_tap_type(cursor, nfc_code)
-        cursor.execute(
-            "INSERT INTO user_logs (nfc_code, guest_name, tap_type) VALUES (%s, %s, %s)",
-            (nfc_code, guest_name, tap_type),
-        )
+        cursor.execute("INSERT INTO user_logs (nfc_code) VALUES (%s)", (nfc_code,))
         log_id = cursor.lastrowid
         conn.commit()
         return get_log_by_id(log_id)
     finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
+        close(cursor, conn)
 
 
 def get_user_fullname(nfc_code):
@@ -136,8 +127,8 @@ def get_user_by_nfc(nfc_code):
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            """
-            SELECT id, student_no, lastname, firstname, middlename, fullname, course, project_type, room, nfc_code, created_at, updated_at
+            f"""
+            SELECT {", ".join(USER_COLUMNS)}
             FROM users
             WHERE nfc_code=%s
             """,
@@ -145,12 +136,7 @@ def get_user_by_nfc(nfc_code):
         )
         return cursor.fetchone()
     finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
-
-
+        close(cursor, conn)
 
 
 def get_user_by_id(user_id):
@@ -160,8 +146,8 @@ def get_user_by_id(user_id):
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            """
-            SELECT id, student_no, lastname, firstname, middlename, fullname, course, project_type, room, nfc_code, created_at, updated_at
+            f"""
+            SELECT {", ".join(USER_COLUMNS)}
             FROM users
             WHERE id=%s
             """,
@@ -169,33 +155,8 @@ def get_user_by_id(user_id):
         )
         return cursor.fetchone()
     finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
+        close(cursor, conn)
 
-
-def update_log_guest_name(log_id, guest_name):
-    conn = None
-    cursor = None
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            UPDATE user_logs
-            SET guest_name=%s
-            WHERE id=%s
-            """,
-            ((guest_name or "").strip(), log_id),
-        )
-        conn.commit()
-        return get_log_by_id(log_id)
-    finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
 
 def get_log_by_id(log_id):
     conn = None
@@ -205,18 +166,35 @@ def get_log_by_id(log_id):
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
             """
-            SELECT id, nfc_code, date_logged, status, fullname
-            FROM user_logs_info
-            WHERE id=%s
+            SELECT
+                l.id,
+                l.nfc_code,
+                l.date_logged,
+                CASE
+                    WHEN u.id IS NULL THEN 'GUEST_PENDING'
+                    WHEN (
+                        SELECT COUNT(*)
+                        FROM user_logs day_logs
+                        WHERE day_logs.nfc_code = l.nfc_code
+                          AND day_logs.date_logged >= DATE(l.date_logged)
+                          AND day_logs.date_logged < DATE(l.date_logged) + INTERVAL 1 DAY
+                          AND (
+                            day_logs.date_logged < l.date_logged
+                            OR (day_logs.date_logged = l.date_logged AND day_logs.id <= l.id)
+                          )
+                    ) % 2 = 1 THEN 'TAP_IN'
+                    ELSE 'TAP_OUT'
+                END AS status,
+                COALESCE(u.fullname, 'Guest') AS fullname
+            FROM user_logs l
+            LEFT JOIN users u ON u.nfc_code = l.nfc_code
+            WHERE l.id=%s
             """,
             (log_id,),
         )
         return cursor.fetchone()
     finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
+        close(cursor, conn)
 
 
 def get_logs(limit=100):
@@ -227,19 +205,35 @@ def get_logs(limit=100):
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
             """
-            SELECT id, date_logged, status, fullname
-            FROM user_logs_info
-            ORDER BY date_logged DESC
+            SELECT
+                l.id,
+                l.date_logged,
+                CASE
+                    WHEN u.id IS NULL THEN 'GUEST_PENDING'
+                    WHEN (
+                        SELECT COUNT(*)
+                        FROM user_logs day_logs
+                        WHERE day_logs.nfc_code = l.nfc_code
+                          AND day_logs.date_logged >= DATE(l.date_logged)
+                          AND day_logs.date_logged < DATE(l.date_logged) + INTERVAL 1 DAY
+                          AND (
+                            day_logs.date_logged < l.date_logged
+                            OR (day_logs.date_logged = l.date_logged AND day_logs.id <= l.id)
+                          )
+                    ) % 2 = 1 THEN 'TAP_IN'
+                    ELSE 'TAP_OUT'
+                END AS status,
+                COALESCE(u.fullname, 'Guest') AS fullname
+            FROM user_logs l
+            LEFT JOIN users u ON u.nfc_code = l.nfc_code
+            ORDER BY l.date_logged DESC, l.id DESC
             LIMIT %s
             """,
             (limit,),
         )
         return cursor.fetchall()
     finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
+        close(cursor, conn)
 
 
 def get_all_users():
@@ -249,18 +243,15 @@ def get_all_users():
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            """
-            SELECT id, student_no, lastname, firstname, middlename, fullname, course, project_type, room, nfc_code, created_at, updated_at
+            f"""
+            SELECT {", ".join(USER_COLUMNS)}
             FROM users
             ORDER BY id ASC
             """
         )
         return cursor.fetchall()
     finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
+        close(cursor, conn)
 
 
 def get_all_logs():
@@ -271,17 +262,35 @@ def get_all_logs():
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
             """
-            SELECT id, nfc_code, date_logged, status, fullname
-            FROM user_logs_info
-            ORDER BY date_logged ASC
+            SELECT
+                l.id,
+                l.nfc_code,
+                l.date_logged,
+                CASE
+                    WHEN u.id IS NULL THEN 'GUEST_PENDING'
+                    WHEN (
+                        SELECT COUNT(*)
+                        FROM user_logs day_logs
+                        WHERE day_logs.nfc_code = l.nfc_code
+                          AND day_logs.date_logged >= DATE(l.date_logged)
+                          AND day_logs.date_logged < DATE(l.date_logged) + INTERVAL 1 DAY
+                          AND (
+                            day_logs.date_logged < l.date_logged
+                            OR (day_logs.date_logged = l.date_logged AND day_logs.id <= l.id)
+                          )
+                    ) % 2 = 1 THEN 'TAP_IN'
+                    ELSE 'TAP_OUT'
+                END AS status,
+                COALESCE(u.fullname, 'Guest') AS fullname
+            FROM user_logs l
+            LEFT JOIN users u ON u.nfc_code = l.nfc_code
+            ORDER BY l.date_logged ASC, l.id ASC
             """
         )
         return cursor.fetchall()
     finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
+        close(cursor, conn)
+
 
 def enqueue_firebase_sync(record_type, record_id, error=None):
     conn = None
@@ -302,10 +311,7 @@ def enqueue_firebase_sync(record_type, record_id, error=None):
         )
         conn.commit()
     finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
+        close(cursor, conn)
 
 
 def get_pending_firebase_sync(limit=100):
@@ -326,10 +332,7 @@ def get_pending_firebase_sync(limit=100):
         )
         return cursor.fetchall()
     finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
+        close(cursor, conn)
 
 
 def mark_firebase_sync_done(queue_id):
@@ -348,10 +351,7 @@ def mark_firebase_sync_done(queue_id):
         )
         conn.commit()
     finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
+        close(cursor, conn)
 
 
 def mark_firebase_sync_failed(queue_id, error):
@@ -370,10 +370,7 @@ def mark_firebase_sync_failed(queue_id, error):
         )
         conn.commit()
     finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
+        close(cursor, conn)
 
 
 def get_firebase_queue_count():
@@ -393,7 +390,4 @@ def get_firebase_queue_count():
         row = cursor.fetchone() or {}
         return {"pending": int(row.get("pending") or 0), "total": int(row.get("total") or 0)}
     finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
+        close(cursor, conn)
