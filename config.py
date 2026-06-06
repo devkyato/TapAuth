@@ -43,7 +43,6 @@ FIREBASE_CONFIG = {
     "mode": os.getenv("AIRHUB_FIREBASE_MODE", "realtime_db"),
     "database_url": os.getenv("AIRHUB_FIREBASE_DATABASE_URL", ""),
     "database_secret": os.getenv("AIRHUB_FIREBASE_DATABASE_SECRET", ""),
-    "credentials_path": os.getenv("GOOGLE_APPLICATION_CREDENTIALS", ""),
     "project_id": os.getenv("AIRHUB_FIREBASE_PROJECT_ID", ""),
 }
 ACCESS_CONFIG = {

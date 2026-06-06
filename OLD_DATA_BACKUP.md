@@ -25,11 +25,11 @@ After extracting an old SQL dump, import it safely into MySQL:
 bash scripts/migrate_old_sql.sh /path/to/old_airhub.sql
 ```
 
-Then upload all active MySQL data to Firestore:
+Then upload all active MySQL data to Realtime Database:
 
 ```bash
 source .venv/bin/activate
-python scripts/sync_firestore.py
+python scripts/sync_realtime_db.py
 ```
 ## Dump Raw MariaDB Files To Real SQL
 
@@ -44,7 +44,7 @@ Then merge and upload:
 ```bash
 bash scripts/migrate_old_sql.sh /path/to/old_airhub_real_dump.sql
 source .venv/bin/activate
-python scripts/sync_firestore.py
+python scripts/sync_realtime_db.py
 ```
 
 The recovery script starts the old MariaDB data directory in an isolated temporary socket/port and does not overwrite the current Airhub database.

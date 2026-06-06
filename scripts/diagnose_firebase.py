@@ -17,14 +17,12 @@ def main():
     for key, value in status.items():
         print(f"  {key}: {value}")
 
-    if status["database_secret_configured"] and status["realtime_database_target"]:
-        print("Realtime Database legacy-secret sync is configured. Service-account JWT is not required for RTDB.")
-    elif not status["admin_sdk_importable"]:
-        raise SystemExit("firebase-admin is not importable. Run: .venv/bin/pip install -r requirements.txt")
-    elif not status["credentials_file_exists"]:
-        raise SystemExit("Service account JSON was not found at GOOGLE_APPLICATION_CREDENTIALS.")
-    elif not status["credentials_private_key_present"]:
-        raise SystemExit("Service account JSON is missing private_key. Download a new Firebase Admin SDK key.")
+    if not status["database_url_configured"]:
+        raise SystemExit("AIRHUB_FIREBASE_DATABASE_URL is missing in .env.")
+    if not status["database_secret_configured"]:
+        raise SystemExit("AIRHUB_FIREBASE_DATABASE_SECRET is missing in .env.")
+    if not status["realtime_database_target"]:
+        raise SystemExit("Realtime Database sync is not configured. Check AIRHUB_FIREBASE_ENABLED and mode.")
 
     users = get_all_users()
     logs = get_all_logs()

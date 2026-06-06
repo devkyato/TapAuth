@@ -65,7 +65,7 @@ if [[ "${AIRHUB_SKIP_SERVICE_RESTART:-0}" != "1" ]]; then
 fi
 
 if [[ "${AIRHUB_FIREBASE_ENABLED:-false}" == "true" ]]; then
-  .venv/bin/python scripts/sync_firestore.py
+  .venv/bin/python scripts/sync_realtime_db.py
 fi
 
 echo "Update complete. Service status: sudo systemctl status $SERVICE_NAME"
