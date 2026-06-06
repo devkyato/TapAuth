@@ -53,8 +53,10 @@ def handle_tap(uid):
     fullname = log_record.get("fullname") if log_record else get_user_fullname(uid)
     if not fullname or (log_record and str(log_record.get("status", "")).startswith("GUEST")):
         return {"message": "Guest tap recorded.", "log_id": log_record.get("id")}
-    tap_label = "Tap out" if log_record.get("status") == "TAP_OUT" else "Tap in"
-    return {"message": f"{tap_label}: {fullname}", "log_id": log_record.get("id")}
+    if log_record.get("status") == "TAP_OUT":
+        duration = log_record.get("duration_label") or "00:00:00"
+        return {"message": f"Log out: {fullname}. Stayed {duration}.", "log_id": log_record.get("id")}
+    return {"message": f"Login: {fullname}", "log_id": log_record.get("id")}
 
 
 nfc_reader = NFCStandbyReader(on_tap=handle_tap)

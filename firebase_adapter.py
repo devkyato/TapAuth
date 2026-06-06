@@ -81,9 +81,17 @@ def public_log_payload(log_record):
     return {
         "local_id": log_record.get("id"),
         "fullname": fullname,
+        "lastname": log_record.get("lastname"),
+        "firstname": log_record.get("firstname"),
+        "student_no": log_record.get("student_no"),
         "status": status,
+        "event_type": log_record.get("event_type"),
         "tap_type": status if status in ("TAP_IN", "TAP_OUT") else None,
         "date_logged": rtdb_safe(log_record.get("date_logged")),
+        "time_entered": log_record.get("time_entered"),
+        "time_left": log_record.get("time_left"),
+        "duration_seconds": log_record.get("duration_seconds"),
+        "duration_label": log_record.get("duration_label"),
         "source": "raspberry_pi",
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
