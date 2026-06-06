@@ -33,6 +33,17 @@ GOOGLE_APPLICATION_CREDENTIALS=/home/mako-airhub/loginsys_airhub/firebase-servic
 
 The service account JSON must stay on the Raspberry Pi and must not be committed.
 
+For the simpler Realtime Database-only setup, configure the legacy database secret locally on the Pi instead of using a service-account JSON:
+
+```bash
+cd /home/mako-airhub/loginsys_airhub
+bash scripts/configure_realtime_db_secret.sh \
+  https://airhub-login-default-rtdb.asia-southeast1.firebasedatabase.app/ \
+  <legacy-database-secret>
+source .venv/bin/activate
+python scripts/sync_firestore.py
+```
+
 
 ## GitHub CLI Raspberry Pi Flow
 

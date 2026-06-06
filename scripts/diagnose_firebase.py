@@ -17,11 +17,13 @@ def main():
     for key, value in status.items():
         print(f"  {key}: {value}")
 
-    if not status["admin_sdk_importable"]:
+    if status["database_secret_configured"] and status["realtime_database_target"]:
+        print("Realtime Database legacy-secret sync is configured. Service-account JWT is not required for RTDB.")
+    elif not status["admin_sdk_importable"]:
         raise SystemExit("firebase-admin is not importable. Run: .venv/bin/pip install -r requirements.txt")
-    if not status["credentials_file_exists"]:
+    elif not status["credentials_file_exists"]:
         raise SystemExit("Service account JSON was not found at GOOGLE_APPLICATION_CREDENTIALS.")
-    if not status["credentials_private_key_present"]:
+    elif not status["credentials_private_key_present"]:
         raise SystemExit("Service account JSON is missing private_key. Download a new Firebase Admin SDK key.")
 
     users = get_all_users()

@@ -1,4 +1,7 @@
 import json
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -21,8 +24,10 @@ _firestore_client = None
 def firebase_is_configured():
     return (
         FIREBASE_CONFIG["enabled"]
-        and bool(FIREBASE_CONFIG["credentials_path"])
-        and firebase_admin is not None
+        and (
+            bool(FIREBASE_CONFIG["database_secret"])
+            or (bool(FIREBASE_CONFIG["credentials_path"]) and firebase_admin is not None)
+        )
     )
 
 
@@ -30,7 +35,7 @@ def realtime_database_enabled():
     return (
         FIREBASE_CONFIG["mode"] in ("realtime_db", "both", "firestore_and_realtime_db")
         and bool(FIREBASE_CONFIG["database_url"])
-        and db is not None
+        and (bool(FIREBASE_CONFIG["database_secret"]) or db is not None)
     )
 
 
@@ -47,6 +52,11 @@ def init_firebase():
     if _app_ready:
         return True
     if not firebase_is_configured():
+        return False
+    if FIREBASE_CONFIG["database_secret"]:
+        _app_ready = True
+        return True
+    if firebase_admin is None or not FIREBASE_CONFIG["credentials_path"]:
         return False
     if not firebase_admin._apps:
         cred = credentials.Certificate(FIREBASE_CONFIG["credentials_path"])
@@ -73,6 +83,7 @@ def firebase_status():
         "mode": FIREBASE_CONFIG["mode"],
         "project_id_configured": bool(FIREBASE_CONFIG["project_id"]),
         "database_url_configured": bool(FIREBASE_CONFIG["database_url"]),
+        "database_secret_configured": bool(FIREBASE_CONFIG["database_secret"]),
         "credentials_path_configured": bool(credentials_path),
         "credentials_file_exists": credentials_info["exists"],
         "credentials_project_id": credentials_info["project_id"],
@@ -132,6 +143,59 @@ def rtdb_safe(value):
     return value
 
 
+def rtdb_rest_url(path):
+    base_url = FIREBASE_CONFIG["database_url"].rstrip("/")
+    clean_path = path.strip("/")
+    query = urllib.parse.urlencode({"auth": FIREBASE_CONFIG["database_secret"]})
+    return f"{base_url}/{clean_path}.json?{query}"
+
+
+def rtdb_rest_put(path, payload):
+    data = json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")
+    request = urllib.request.Request(
+        rtdb_rest_url(path),
+        data=data,
+        method="PUT",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            response.read()
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"Realtime Database REST error {exc.code}: {body}") from exc
+
+
+def rtdb_rest_patch(path, payload):
+    data = json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")
+    request = urllib.request.Request(
+        rtdb_rest_url(path),
+        data=data,
+        method="PATCH",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            response.read()
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"Realtime Database REST error {exc.code}: {body}") from exc
+
+
+def write_rtdb(path, payload):
+    if FIREBASE_CONFIG["database_secret"]:
+        rtdb_rest_put(path, payload)
+    else:
+        db.reference(path).set(payload)
+
+
+def update_rtdb(updates):
+    if FIREBASE_CONFIG["database_secret"]:
+        rtdb_rest_patch("/", updates)
+    else:
+        db.reference("/").update(updates)
+
+
 def public_log_payload(log_record):
     fullname = log_record.get("fullname") or "Guest"
     status = log_record.get("status") or "GUEST_PENDING"
@@ -171,9 +235,9 @@ def sync_log(log_record):
         payload = public_log_payload(log_record)
         targets = []
         if realtime_database_enabled():
-            db.reference(f"airhub/logs/{doc_id}").set(payload)
+            write_rtdb(f"airhub/logs/{doc_id}", payload)
             targets.append(f"rtdb:airhub/logs/{doc_id}")
-        if firestore_enabled():
+        if firestore_enabled() and not FIREBASE_CONFIG["database_secret"]:
             get_firestore_client().collection("airhub_logs").document(doc_id).set(payload)
             targets.append(f"firestore:airhub_logs/{doc_id}")
         if not targets:
@@ -191,9 +255,9 @@ def sync_user(user_record):
         payload = user_payload(user_record)
         targets = []
         if realtime_database_enabled():
-            db.reference(f"airhub/users/{doc_id}").set(payload)
+            write_rtdb(f"airhub/users/{doc_id}", payload)
             targets.append(f"rtdb:airhub/users/{doc_id}")
-        if firestore_enabled():
+        if firestore_enabled() and not FIREBASE_CONFIG["database_secret"]:
             get_firestore_client().collection("airhub_users").document(doc_id).set(payload)
             targets.append(f"firestore:airhub_users/{doc_id}")
         if not targets:
@@ -215,9 +279,9 @@ def sync_all(users, logs):
             for log in logs:
                 updates[f"airhub/logs/{log.get('id')}"] = public_log_payload(log)
             if updates:
-                db.reference("/").update(updates)
+                update_rtdb(updates)
             targets.append("realtime_database")
-        if firestore_enabled():
+        if firestore_enabled() and not FIREBASE_CONFIG["database_secret"]:
             client = get_firestore_client()
             batch = client.batch()
             batch_size = 0
