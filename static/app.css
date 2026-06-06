@@ -403,7 +403,7 @@ input:focus {
     margin: 0 auto;
     max-width: 1020px;
     min-height: 100vh;
-    padding: 34px 18px 42px;
+    padding: 18px 14px 24px;
     position: relative;
     z-index: 1;
 }
@@ -416,14 +416,14 @@ input:focus {
 }
 
 .tap-header img {
-    height: 132px;
+    height: 96px;
     object-fit: contain;
-    width: 132px;
+    width: 96px;
 }
 
 .tap-header h1 {
-    font-size: 38px;
-    margin-top: 8px;
+    font-size: 32px;
+    margin-top: 4px;
 }
 
 .tap-header p {
@@ -434,7 +434,7 @@ input:focus {
 }
 
 .tap-header time {
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 800;
 }
 
@@ -446,8 +446,8 @@ input:focus {
 }
 
 .tap-stage {
-    margin: 30px auto 18px;
-    min-height: 170px;
+    margin: 18px auto 14px;
+    min-height: 118px;
     text-align: center;
 }
 
@@ -460,7 +460,7 @@ input:focus {
 }
 
 .tap-stage h2 {
-    font-size: clamp(40px, 6vw, 72px);
+    font-size: 48px;
     line-height: 1;
 }
 
@@ -470,7 +470,7 @@ input:focus {
 
 .tap-stage > p:last-child {
     color: var(--muted);
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 700;
 }
 
@@ -479,33 +479,6 @@ input:focus {
 }
 
 @media (max-width: 700px) {
-    .tap-header img { height: 108px; width: 108px; }
-    .tap-stage { min-height: 145px; }
-}
-
-.guest-panel {
-    background: rgba(255, 255, 255, 0.94);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    margin: 0 auto 18px;
-    max-width: 620px;
-    padding: 18px;
-}
-
-.guest-form {
-    align-items: end;
-    display: grid;
-    gap: 12px;
-    grid-template-columns: 1fr auto;
-}
-
-.guest-form .primary-action {
-    grid-column: auto;
-    min-height: 44px;
-    padding: 0 18px;
-}
-
-@media (max-width: 700px) {
-    .guest-form { grid-template-columns: 1fr; }
-    .guest-form .primary-action { grid-column: 1; }
+    .tap-header img { height: 84px; width: 84px; }
+    .tap-stage { min-height: 112px; }
 }

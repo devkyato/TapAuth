@@ -15,6 +15,7 @@ const syncState = document.getElementById("syncState");
 const tapMessage = document.getElementById("tapMessage");
 const tapSubtext = document.getElementById("tapSubtext");
 let lastSeenId = null;
+let lastRowsKey = "";
 let greetingTimer = null;
 
 function escapeHtml(value) {
@@ -55,7 +56,10 @@ function renderLogs(snapshot) {
         .sort((a, b) => new Date(b.date_logged || 0) - new Date(a.date_logged || 0));
 
     if (rows.length === 0) {
-        logsBody.innerHTML = '<tr><td colspan="7">No logs yet.</td></tr>';
+        if (lastRowsKey !== "empty") {
+            logsBody.innerHTML = '<tr><td colspan="7">No logs yet.</td></tr>';
+            lastRowsKey = "empty";
+        }
         return;
     }
 
@@ -65,7 +69,12 @@ function renderLogs(snapshot) {
         lastSeenId = newest.id;
     }
 
-    logsBody.innerHTML = rows.slice(0, 12).map((row) => `
+    const visibleRows = rows.slice(0, 6);
+    const nextRowsKey = visibleRows.map((row) => `${row.id}:${row.status}:${row.duration_label || ""}`).join("|");
+    if (nextRowsKey === lastRowsKey) return;
+    lastRowsKey = nextRowsKey;
+
+    logsBody.innerHTML = visibleRows.map((row) => `
         <tr>
             <td><span class="status-pill">${escapeHtml(row.event_type || "")}</span></td>
             <td>${escapeHtml(row.lastname || "")}</td>
@@ -81,7 +90,7 @@ function renderLogs(snapshot) {
 updateClock();
 setInterval(updateClock, 1000);
 
-const logsQuery = query(ref(db, "airhub/logs"), orderByChild("date_logged"), limitToLast(12));
+const logsQuery = query(ref(db, "airhub/logs"), orderByChild("date_logged"), limitToLast(6));
 onValue(logsQuery, (snapshot) => {
     syncState.textContent = "Live";
     renderLogs(snapshot);
