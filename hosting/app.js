@@ -23,25 +23,28 @@ function escapeHtml(value) {
     }[char]));
 }
 
-function formatDate(value) {
-    if (!value) return "Pending time";
-    return new Date(value).toLocaleString();
-}
-
 function updateClock() {
     document.getElementById("clock").textContent = new Date().toLocaleString();
 }
 
-function showGreeting(name, status) {
+function showGreeting(row) {
     clearTimeout(greetingTimer);
     tapMessage.classList.remove("tap-flash");
-    tapMessage.textContent = status === "GUEST_PENDING" ? "Guest accepted. Type your name on the kiosk." : `Hi, ${name}!`;
+    if (row.status === "GUEST_PENDING") {
+        tapMessage.textContent = "Guest tap recorded.";
+        tapSubtext.textContent = "Register this card to show a name.";
+    } else if (row.event_type === "LOGOUT") {
+        tapMessage.textContent = `Log out: ${row.fullname || "Guest"}`;
+        tapSubtext.textContent = `Stayed ${row.duration_label || "00:00:00"}.`;
+    } else {
+        tapMessage.textContent = `Login: ${row.fullname || "Guest"}`;
+        tapSubtext.textContent = "Time entered saved.";
+    }
     void tapMessage.offsetWidth;
     tapMessage.classList.add("tap-flash");
-    tapSubtext.textContent = status === "GUEST_PENDING" ? "The tap is saved locally and will sync when online." : "Time-in saved. Welcome.";
     greetingTimer = setTimeout(() => {
         tapMessage.classList.remove("tap-flash");
-        tapMessage.textContent = "Ready for tap-in";
+        tapMessage.textContent = "Ready for tap-in or tap-out";
         tapSubtext.textContent = "Recent taps from the Raspberry Pi appear here automatically.";
     }, 3200);
 }
@@ -52,21 +55,25 @@ function renderLogs(snapshot) {
         .sort((a, b) => new Date(b.date_logged || 0) - new Date(a.date_logged || 0));
 
     if (rows.length === 0) {
-        logsBody.innerHTML = '<tr><td colspan="3">No logs yet.</td></tr>';
+        logsBody.innerHTML = '<tr><td colspan="7">No logs yet.</td></tr>';
         return;
     }
 
     const newest = rows[0];
     if (newest && newest.id !== lastSeenId) {
-        if (lastSeenId !== null) showGreeting(newest.fullname || "Guest", newest.status);
+        if (lastSeenId !== null) showGreeting(newest);
         lastSeenId = newest.id;
     }
 
     logsBody.innerHTML = rows.slice(0, 12).map((row) => `
         <tr>
-            <td>${escapeHtml(row.fullname || "Guest")}</td>
-            <td>${escapeHtml(formatDate(row.date_logged))}</td>
-            <td><span class="status-pill">${escapeHtml(row.status || "GUEST")}</span></td>
+            <td><span class="status-pill">${escapeHtml(row.event_type || "")}</span></td>
+            <td>${escapeHtml(row.lastname || "")}</td>
+            <td>${escapeHtml(row.firstname || "")}</td>
+            <td>${escapeHtml(row.student_no || "")}</td>
+            <td>${escapeHtml(row.time_entered || "")}</td>
+            <td>${escapeHtml(row.time_left || "")}</td>
+            <td>${escapeHtml(row.duration_label || "")}</td>
         </tr>
     `).join("");
 }
@@ -80,5 +87,5 @@ onValue(logsQuery, (snapshot) => {
     renderLogs(snapshot);
 }, (error) => {
     syncState.textContent = "Offline";
-    logsBody.innerHTML = `<tr><td colspan="3">${escapeHtml(error.message || "Unable to load Realtime Database logs.")}</td></tr>`;
+    logsBody.innerHTML = `<tr><td colspan="7">${escapeHtml(error.message || "Unable to load Realtime Database logs.")}</td></tr>`;
 });

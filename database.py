@@ -164,34 +164,7 @@ def get_log_by_id(log_id):
     try:
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute(
-            """
-            SELECT
-                l.id,
-                l.nfc_code,
-                l.date_logged,
-                CASE
-                    WHEN u.id IS NULL THEN 'GUEST_PENDING'
-                    WHEN (
-                        SELECT COUNT(*)
-                        FROM user_logs day_logs
-                        WHERE day_logs.nfc_code = l.nfc_code
-                          AND day_logs.date_logged >= DATE(l.date_logged)
-                          AND day_logs.date_logged < DATE(l.date_logged) + INTERVAL 1 DAY
-                          AND (
-                            day_logs.date_logged < l.date_logged
-                            OR (day_logs.date_logged = l.date_logged AND day_logs.id <= l.id)
-                          )
-                    ) % 2 = 1 THEN 'TAP_IN'
-                    ELSE 'TAP_OUT'
-                END AS status,
-                COALESCE(u.fullname, 'Guest') AS fullname
-            FROM user_logs l
-            LEFT JOIN users u ON u.nfc_code = l.nfc_code
-            WHERE l.id=%s
-            """,
-            (log_id,),
-        )
+        cursor.execute("SELECT * FROM user_logs_info WHERE id=%s", (log_id,))
         return cursor.fetchone()
     finally:
         close(cursor, conn)
@@ -205,28 +178,9 @@ def get_logs(limit=100):
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
             """
-            SELECT
-                l.id,
-                l.date_logged,
-                CASE
-                    WHEN u.id IS NULL THEN 'GUEST_PENDING'
-                    WHEN (
-                        SELECT COUNT(*)
-                        FROM user_logs day_logs
-                        WHERE day_logs.nfc_code = l.nfc_code
-                          AND day_logs.date_logged >= DATE(l.date_logged)
-                          AND day_logs.date_logged < DATE(l.date_logged) + INTERVAL 1 DAY
-                          AND (
-                            day_logs.date_logged < l.date_logged
-                            OR (day_logs.date_logged = l.date_logged AND day_logs.id <= l.id)
-                          )
-                    ) % 2 = 1 THEN 'TAP_IN'
-                    ELSE 'TAP_OUT'
-                END AS status,
-                COALESCE(u.fullname, 'Guest') AS fullname
-            FROM user_logs l
-            LEFT JOIN users u ON u.nfc_code = l.nfc_code
-            ORDER BY l.date_logged DESC, l.id DESC
+            SELECT *
+            FROM user_logs_info
+            ORDER BY date_logged DESC, id DESC
             LIMIT %s
             """,
             (limit,),
@@ -260,33 +214,7 @@ def get_all_logs():
     try:
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute(
-            """
-            SELECT
-                l.id,
-                l.nfc_code,
-                l.date_logged,
-                CASE
-                    WHEN u.id IS NULL THEN 'GUEST_PENDING'
-                    WHEN (
-                        SELECT COUNT(*)
-                        FROM user_logs day_logs
-                        WHERE day_logs.nfc_code = l.nfc_code
-                          AND day_logs.date_logged >= DATE(l.date_logged)
-                          AND day_logs.date_logged < DATE(l.date_logged) + INTERVAL 1 DAY
-                          AND (
-                            day_logs.date_logged < l.date_logged
-                            OR (day_logs.date_logged = l.date_logged AND day_logs.id <= l.id)
-                          )
-                    ) % 2 = 1 THEN 'TAP_IN'
-                    ELSE 'TAP_OUT'
-                END AS status,
-                COALESCE(u.fullname, 'Guest') AS fullname
-            FROM user_logs l
-            LEFT JOIN users u ON u.nfc_code = l.nfc_code
-            ORDER BY l.date_logged ASC, l.id ASC
-            """
-        )
+        cursor.execute("SELECT * FROM user_logs_info ORDER BY date_logged ASC, id ASC")
         return cursor.fetchall()
     finally:
         close(cursor, conn)

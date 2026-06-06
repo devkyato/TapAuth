@@ -33,13 +33,17 @@
                 <table class="logs-table">
                     <thead>
                         <tr>
-                            <th>Full Name</th>
-                            <th>Date Logged</th>
-                            <th>Status</th>
+                            <th>Type</th>
+                            <th>Last Name</th>
+                            <th>First Name</th>
+                            <th>Student No.</th>
+                            <th>Time Entered</th>
+                            <th>Time Left</th>
+                            <th>Stayed</th>
                         </tr>
                     </thead>
                     <tbody id="logsBody">
-                        <tr><td colspan="3">Loading logs...</td></tr>
+                        <tr><td colspan="7">Loading logs...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -68,8 +72,8 @@
             tapMessage.classList.remove('tap-flash');
             tapMessage.textContent = message || 'Tap recorded';
             tapMessage.classList.add('tap-flash');
-            $('#tapSubtext').textContent = message && message.toLowerCase().startsWith('tap out')
-                ? 'Time-out saved. Thank you.'
+            $('#tapSubtext').textContent = message && message.toLowerCase().startsWith('log out')
+                ? 'Time left saved. Thank you.'
                 : 'Time-in saved. Welcome.';
             greetingTimer = setTimeout(function() {
                 tapMessage.classList.remove('tap-flash');
@@ -80,14 +84,18 @@
 
         function renderLogs(rows) {
             if (!Array.isArray(rows) || rows.length === 0) {
-                $('#logsBody').innerHTML = '<tr><td colspan="3">No logs yet.</td></tr>';
+                $('#logsBody').innerHTML = '<tr><td colspan="7">No logs yet.</td></tr>';
                 return;
             }
             const html = rows.slice(0, 8).map(function(row) {
                 return `<tr>
-                    <td>${escapeHtml(row.fullname)}</td>
-                    <td>${escapeHtml(row.date_logged)}</td>
-                    <td><span class="status-pill">${escapeHtml(row.status)}</span></td>
+                    <td><span class="status-pill">${escapeHtml(row.event_type)}</span></td>
+                    <td>${escapeHtml(row.lastname)}</td>
+                    <td>${escapeHtml(row.firstname)}</td>
+                    <td>${escapeHtml(row.student_no)}</td>
+                    <td>${escapeHtml(row.time_entered)}</td>
+                    <td>${escapeHtml(row.time_left || '')}</td>
+                    <td>${escapeHtml(row.duration_label || '')}</td>
                 </tr>`;
             }).join('');
             $('#logsBody').innerHTML = html;

@@ -92,6 +92,13 @@ user_logs: id, nfc_code, date_logged
 
 Tap-in/tap-out status is calculated from the order of taps per card per day, so no extra `tap_type` column is required.
 
+The kiosk frontend shows only attendance fields:
+
+- Login rows: last name, first name, student number, time entered
+- Logout rows: last name, first name, student number, time entered, time left, duration stayed
+
+When a card logs out, the scan message also shows how long the person stayed.
+
 ## Auto-Run On Power-On
 
 `bash scripts/setup_raspberry_pi.sh` installs `airhub.service` as a systemd service:
