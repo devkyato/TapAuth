@@ -1,5 +1,8 @@
 
 !.env.example
+.env
+firebase-service-account.json
+*firebase-adminsdk*.json
 
 __pycache__/
 *.py[cod]
