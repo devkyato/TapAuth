@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>APC Airhub Registration</title>
     <link rel="stylesheet" href="/static/app.css">
-    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
 </head>
 <body>
     <main class="shell">
@@ -95,52 +94,57 @@
 
     <script>
         let tapCounter = 0;
+        const $ = (selector) => document.querySelector(selector);
 
         function setMessage(text, type) {
-            $('#formMessage').removeClass('success error').addClass(type || '').text(text || '');
+            $('#formMessage').className = 'message' + (type ? ' ' + type : '');
+            $('#formMessage').textContent = text || '';
         }
 
         function refreshStatus() {
-            $.getJSON('/system_status', function(data) {
-                $('#readerStatus').text(data.scanner.connected ? 'Connected' : 'Standby');
-                $('#databaseStatus').text(data.database.connected ? 'Local MySQL' : 'Needs setup');
-                $('#wifiStatus').text(data.wifi.ssid || 'Not configured');
-            });
+            fetch('/system_status')
+                .then((response) => response.json())
+                .then((data) => {
+                    $('#readerStatus').textContent = data.scanner.connected ? 'Connected' : 'Standby';
+                    $('#databaseStatus').textContent = data.database.connected ? 'Local MySQL' : 'Needs setup';
+                    $('#wifiStatus').textContent = data.wifi.ssid || 'Not configured';
+                });
         }
 
         function pollLatestTap() {
-            $.getJSON('/latest_tap?since=' + tapCounter, function(resp) {
+            fetch('/latest_tap?since=' + tapCounter)
+                .then((response) => response.json())
+                .then((resp) => {
                 if (!resp.changed) {
                     return;
                 }
                 tapCounter = resp.tap_counter;
-                $('#nfc_code').val(resp.uid || '');
-                $('#scanPreview').text(resp.uid || 'Waiting for card');
+                $('#nfc_code').value = resp.uid || '';
+                $('#scanPreview').textContent = resp.uid || 'Waiting for card';
                 setMessage('Card captured and ready to assign. Complete the profile, then register.', 'success');
             });
         }
 
-        $('#registrationForm').on('submit', function(event) {
+        $('#registrationForm').addEventListener('submit', function(event) {
             event.preventDefault();
-            $.ajax({
-                type: 'POST',
-                url: '/register',
-                data: $(this).serialize(),
-                success: function(response) {
+            fetch('/register', {
+                method: 'POST',
+                body: new FormData(this),
+            })
+                .then((response) => response.ok ? response.json() : response.json().then((data) => Promise.reject(data)))
+                .then((response) => {
                     setMessage(response.message || 'Registration successful.', 'success');
-                    $('#registrationForm')[0].reset();
-                    $('#scanPreview').text('Waiting for card');
-                },
-                error: function(xhr) {
-                    const response = xhr.responseJSON || {};
+                    $('#registrationForm').reset();
+                    $('#scanPreview').textContent = 'Waiting for card';
+                })
+                .catch((response) => {
                     setMessage(response.error || 'Registration failed.', 'error');
-                }
-            });
+                });
         });
 
         refreshStatus();
         setInterval(refreshStatus, 5000);
-        setInterval(pollLatestTap, 500);
+        setInterval(pollLatestTap, 900);
     </script>
 </body>
 </html>

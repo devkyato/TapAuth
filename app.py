@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-from flask import Flask, jsonify, render_template, request
+import queue
+import threading
+
+from flask import Flask, jsonify, redirect, render_template, request, url_for
 
 from config import ACCESS_CONFIG, APP_CONFIG, WIFI_CONFIG
 from database import (
@@ -13,19 +16,46 @@ from database import (
     test_database_connection,
 )
 from scanner import NFCStandbyReader
+from firebase_adapter import firebase_status
 from sync_service import retry_pending, sync_log_or_queue, sync_user_or_queue
 
 app = Flask(__name__)
+sync_queue = queue.Queue(maxsize=500)
+
+
+def enqueue_sync(record_type, record):
+    try:
+        sync_queue.put_nowait((record_type, record))
+    except queue.Full:
+        app.logger.warning("Firebase sync queue is full; record will remain in local MySQL only for now.")
+
+
+def firebase_sync_worker():
+    while True:
+        record_type, record = sync_queue.get()
+        try:
+            if record_type == "user":
+                sync_user_or_queue(record)
+            else:
+                sync_log_or_queue(record)
+            retry_pending(limit=5)
+        except Exception as exc:
+            app.logger.warning("Background Firebase sync failed: %s", exc)
+        finally:
+            sync_queue.task_done()
+
+
+threading.Thread(target=firebase_sync_worker, daemon=True).start()
 
 
 def handle_tap(uid):
     log_record = insert_log(uid)
-    sync_log_or_queue(log_record)
-    retry_pending(limit=20)
-    fullname = get_user_fullname(uid)
+    enqueue_sync("log", log_record)
+    fullname = log_record.get("fullname") if log_record else get_user_fullname(uid)
     if not fullname:
         return {"message": "Guest tap recorded. Please type your temporary name.", "log_id": log_record.get("id")}
-    return {"message": f"Hi, {fullname}!", "log_id": log_record.get("id")}
+    tap_label = "Tap out" if log_record.get("status") == "TAP_OUT" else "Tap in"
+    return {"message": f"{tap_label}: {fullname}", "log_id": log_record.get("id")}
 
 
 nfc_reader = NFCStandbyReader(on_tap=handle_tap)
@@ -60,6 +90,11 @@ def index():
     return render_template("index.html", access_code=request.args.get("code", ""))
 
 
+@app.route("/registration")
+def registration_link():
+    return redirect(url_for("index", code=request.args.get("code", "")))
+
+
 @app.route("/system_status")
 def system_status():
     db_status = test_database_connection()
@@ -71,6 +106,7 @@ def system_status():
                 "password_configured": bool(WIFI_CONFIG["password"]),
             },
             "database": db_status,
+            "firebase": firebase_status(),
             "scanner": nfc_reader.status(),
         }
     )
@@ -128,8 +164,7 @@ def register():
             room=request.form["room"],
             nfc_code=request.form["nfc_code"],
         )
-        sync_user_or_queue(user_record)
-        retry_pending(limit=20)
+        enqueue_sync("user", user_record)
         return jsonify({"success": True, "message": "Registration successful."})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
@@ -145,8 +180,7 @@ def guest_name():
         return jsonify({"error": "Log ID and temporary name are required."}), 400
     try:
         log_record = update_log_guest_name(int(log_id), name)
-        sync_log_or_queue(log_record)
-        retry_pending(limit=20)
+        enqueue_sync("log", log_record)
         return jsonify({"success": True, "message": f"Welcome, {name.strip()}!", "log": log_record})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
@@ -154,7 +188,7 @@ def guest_name():
 
 @app.route("/firebase_sync_status")
 def firebase_sync_status():
-    return jsonify(get_firebase_queue_count())
+    return jsonify({**get_firebase_queue_count(), "local_queue": sync_queue.qsize(), "firebase": firebase_status()})
 
 
 @app.route("/retry_firebase_sync", methods=["POST"])
@@ -164,7 +198,7 @@ def retry_firebase_sync():
 @app.route("/user_logs_info")
 def user_logs_info():
     try:
-        return jsonify(get_logs(limit=100))
+        return jsonify(get_logs(limit=25))
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 

@@ -26,13 +26,17 @@ CREATE TABLE IF NOT EXISTS user_logs (
     nfc_code VARCHAR(128) NOT NULL,
     date_logged TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     source VARCHAR(32) NOT NULL DEFAULT 'nfc',
+    tap_type ENUM('TAP_IN','TAP_OUT') NOT NULL DEFAULT 'TAP_IN',
     guest_name VARCHAR(255) NULL,
     INDEX idx_user_logs_nfc_code (nfc_code),
-    INDEX idx_user_logs_date_logged (date_logged)
+    INDEX idx_user_logs_date_logged (date_logged),
+    INDEX idx_user_logs_card_day (nfc_code, date_logged)
 );
 
 
 ALTER TABLE user_logs ADD COLUMN IF NOT EXISTS guest_name VARCHAR(255) NULL AFTER source;
+ALTER TABLE user_logs ADD COLUMN IF NOT EXISTS tap_type ENUM('TAP_IN','TAP_OUT') NOT NULL DEFAULT 'TAP_IN' AFTER source;
+CREATE INDEX IF NOT EXISTS idx_user_logs_card_day ON user_logs (nfc_code, date_logged);
 
 CREATE TABLE IF NOT EXISTS firebase_sync_queue (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -54,7 +58,7 @@ SELECT
     CASE
         WHEN u.id IS NULL AND NULLIF(l.guest_name, '') IS NOT NULL THEN 'GUEST'
         WHEN u.id IS NULL THEN 'GUEST_PENDING'
-        ELSE 'REGISTERED'
+        ELSE l.tap_type
     END AS status,
     COALESCE(u.fullname, NULLIF(l.guest_name, ''), 'Guest') AS fullname
 FROM user_logs l

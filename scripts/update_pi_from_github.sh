@@ -26,7 +26,7 @@ fi
 cd "$PROJECT_DIR"
 
 git fetch origin main
-git pull origin main
+git pull --ff-only origin main
 
 if [[ -d ".venv" ]]; then
   .venv/bin/pip install -r requirements.txt
@@ -48,7 +48,9 @@ SQL
 MYSQL_PWD="$DB_PASSWORD" mysql -u "$DB_USER" "$DB_NAME" < schema.sql
 sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE_NAME"
-sudo systemctl restart "$SERVICE_NAME"
+if [[ "${AIRHUB_SKIP_SERVICE_RESTART:-0}" != "1" ]]; then
+  sudo systemctl restart "$SERVICE_NAME"
+fi
 
 if [[ "${AIRHUB_FIREBASE_ENABLED:-false}" == "true" ]]; then
   .venv/bin/python scripts/sync_firestore.py
