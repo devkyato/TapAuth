@@ -140,6 +140,15 @@ python scripts/diagnose_firebase.py
 
 If the diagnostic still reports `Invalid JWT Signature` after NTP is synchronized, download a fresh Firebase Admin SDK service-account JSON from the `airhub-login` Firebase project and replace the file pointed to by `GOOGLE_APPLICATION_CREDENTIALS`.
 
+To install a fresh key on the Raspberry Pi without committing it:
+
+```bash
+cd /home/mako-airhub/loginsys_airhub
+bash scripts/install_firebase_key.sh /path/to/airhub-login-firebase-adminsdk-key.json
+source .venv/bin/activate
+python scripts/diagnose_firebase.py
+```
+
 Old registrations stay active because NFC matching still uses the local MySQL `users.nfc_code` field. Import old data before registering new cards so previously registered cards are recognized immediately by the kiosk.
 
 ## Firebase Hosting
