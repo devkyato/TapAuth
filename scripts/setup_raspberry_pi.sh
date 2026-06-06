@@ -4,7 +4,9 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$PROJECT_DIR/.env"
 SERVICE_NAME="airhub.service"
+UPDATE_SERVICE_NAME="airhub-update.service"
 RUN_USER="${SUDO_USER:-$USER}"
+RUN_HOME="$(getent passwd "$RUN_USER" | cut -d: -f6)"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   cp "$PROJECT_DIR/.env.example" "$ENV_FILE"
@@ -86,7 +88,7 @@ echo "blacklist pn533_usb" | sudo tee /etc/modprobe.d/blacklist-libnfc.conf >/de
 sudo tee "/etc/systemd/system/$SERVICE_NAME" >/dev/null <<EOF
 [Unit]
 Description=APC Airhub NFC Flask App
-After=network-online.target mariadb.service
+After=network-online.target mariadb.service $UPDATE_SERVICE_NAME
 Wants=network-online.target
 
 [Service]
@@ -102,7 +104,38 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
+sudo tee "/etc/systemd/system/$UPDATE_SERVICE_NAME" >/dev/null <<EOF
+[Unit]
+Description=Update APC Airhub from GitHub on boot
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=$RUN_USER
+WorkingDirectory=$PROJECT_DIR
+Environment=AIRHUB_SKIP_SERVICE_RESTART=1
+ExecStart=/usr/bin/bash $PROJECT_DIR/scripts/update_pi_from_github.sh
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+if [[ -n "$RUN_HOME" && -d "$RUN_HOME" ]]; then
+  AUTOSTART_DIR="$RUN_HOME/.config/autostart"
+  sudo -u "$RUN_USER" mkdir -p "$AUTOSTART_DIR"
+  sudo -u "$RUN_USER" tee "$AUTOSTART_DIR/airhub-kiosk.desktop" >/dev/null <<EOF
+[Desktop Entry]
+Type=Application
+Name=APC Airhub Kiosk
+Exec=sh -c 'sleep 8; BROWSER=$(command -v chromium-browser || command -v chromium || command -v chromium/chromium); exec "$BROWSER" --kiosk --disable-extensions --disable-background-networking --disable-sync --disable-gpu --noerrdialogs --disable-infobars http://127.0.0.1:5000/'
+X-GNOME-Autostart-enabled=true
+EOF
+fi
+
 sudo systemctl daemon-reload
+sudo systemctl enable "$UPDATE_SERVICE_NAME"
 sudo systemctl enable "$SERVICE_NAME"
 sudo systemctl restart "$SERVICE_NAME"
 
@@ -120,6 +153,12 @@ Open:
 
 Hidden registration:
   http://$(hostname -I | awk '{print $1}'):5000/airhub-register?code=$AIRHUB_REGISTRATION_CODE
+
+iPhone registration on the same Wi-Fi:
+  http://$(hostname -I | awk '{print $1}'):5000/airhub-register?code=$AIRHUB_REGISTRATION_CODE
+
+Chromium kiosk autostart:
+  $RUN_HOME/.config/autostart/airhub-kiosk.desktop
 
 If the ACR122U still shows USB busy, unplug it, wait 5 seconds, plug it back in, then run:
   sudo systemctl restart $SERVICE_NAME

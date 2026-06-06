@@ -85,13 +85,35 @@ def create_user(student_no, lastname, firstname, middlename, course, project_typ
             conn.close()
 
 
+def get_next_tap_type(cursor, nfc_code):
+    cursor.execute(
+        """
+        SELECT tap_type
+        FROM user_logs
+        WHERE nfc_code=%s
+          AND date_logged >= CURDATE()
+          AND date_logged < CURDATE() + INTERVAL 1 DAY
+        ORDER BY date_logged DESC, id DESC
+        LIMIT 1
+        """,
+        (nfc_code,),
+    )
+    row = cursor.fetchone()
+    last_tap_type = row[0] if row else None
+    return "TAP_OUT" if last_tap_type == "TAP_IN" else "TAP_IN"
+
+
 def insert_log(nfc_code, guest_name=None):
     conn = None
     cursor = None
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO user_logs (nfc_code, guest_name) VALUES (%s, %s)", (nfc_code, guest_name))
+        tap_type = get_next_tap_type(cursor, nfc_code)
+        cursor.execute(
+            "INSERT INTO user_logs (nfc_code, guest_name, tap_type) VALUES (%s, %s, %s)",
+            (nfc_code, guest_name, tap_type),
+        )
         log_id = cursor.lastrowid
         conn.commit()
         return get_log_by_id(log_id)

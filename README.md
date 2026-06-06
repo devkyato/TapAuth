@@ -1,8 +1,8 @@
 # loginsys_airhub
 
-APC Airhub NFC tap-in, registration, local MySQL, and Firebase Hosting system.
+APC Airhub NFC tap-in/tap-out, registration, local MySQL, and Firebase Hosting system.
 
-The Raspberry Pi is the source of truth for physical card taps. It records every tap into local MySQL/MariaDB for phpMyAdmin, then optionally syncs public-safe data to Firestore. Firebase Hosting reads Firestore and shows the live public tap-in screen.
+The Raspberry Pi is the source of truth for physical card taps. It records every tap into local MySQL/MariaDB for phpMyAdmin, then optionally syncs public-safe data to Firestore. Firebase Hosting reads Firestore and shows the live public tap-in/tap-out screen.
 
 ## Main Files
 
@@ -10,7 +10,7 @@ The Raspberry Pi is the source of truth for physical card taps. It records every
 - `database.py`: local MySQL/phpMyAdmin data access
 - `firebase_adapter.py`: Raspberry Pi to Firestore sync
 - `schema.sql`: local MySQL schema and public log view
-- `templates/login.html`: local Raspberry Pi tap-in kiosk
+- `templates/login.html`: local Raspberry Pi tap-in/tap-out kiosk
 - `templates/index.html`: hidden registration page at `/airhub-register`
 - `hosting/`: Firebase Hosting public app backed by Firestore
 - `scripts/setup_raspberry_pi.sh`: Raspberry Pi setup/service installer
@@ -84,7 +84,7 @@ sudo systemctl restart airhub.service
 sudo systemctl status airhub.service
 ```
 
-That means the tap-in app starts automatically whenever the Raspberry Pi powers on.
+That means the tap-in/tap-out app starts automatically whenever the Raspberry Pi powers on. Setup also creates a desktop autostart entry that opens Chromium in kiosk mode at `http://127.0.0.1:5000/`.
 
 ## Raspberry Pi Setup
 
@@ -107,6 +107,12 @@ Hidden registration uses the Pi-local code:
 http://<pi-ip>:5000/airhub-register?code=<AIRHUB_REGISTRATION_CODE>
 ```
 
+Short registration link for laptops/iPhones on the same Wi-Fi:
+
+```text
+http://<pi-ip>:5000/registration?code=<AIRHUB_REGISTRATION_CODE>
+```
+
 ## Old Data
 
 Import the old SQL without wiping current data:
@@ -122,7 +128,7 @@ source .venv/bin/activate
 python scripts/sync_firestore.py
 ```
 
-Old registrations stay active because NFC matching still uses the local MySQL `users.nfc_code` field.
+Old registrations stay active because NFC matching still uses the local MySQL `users.nfc_code` field. Import old data before registering new cards so previously registered cards are recognized immediately by the kiosk.
 
 ## Firebase Hosting
 
@@ -160,6 +166,7 @@ Hidden registration dashboard:
 
 ```text
 http://127.0.0.1:5000/airhub-register?code=airhub123
+http://127.0.0.1:5000/registration?code=airhub123
 ```
 
 Local database/phpMyAdmin:

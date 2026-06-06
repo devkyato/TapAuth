@@ -8,6 +8,15 @@ except ImportError:
 
 if load_dotenv:
     load_dotenv(Path(__file__).with_name(".env"))
+else:
+    env_path = Path(__file__).with_name(".env")
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
 
 APP_CONFIG = {
     "name": "APC Airhub",

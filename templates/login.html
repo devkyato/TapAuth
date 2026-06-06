@@ -5,13 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>APC Airhub Tap-In</title>
     <link rel="stylesheet" href="/static/app.css">
-    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
 </head>
 <body class="tap-page">
-    <div class="cube-field" aria-hidden="true">
-        <span></span><span></span><span></span><span></span><span></span><span></span>
-    </div>
-
     <main class="tap-shell">
         <header class="tap-header">
             <img src="/static/soe_airhub_logo.png" alt="Asia Pacific College School of Engineering">
@@ -67,6 +62,7 @@
     <script>
         let tapCounter = 0;
         let greetingTimer = null;
+        const $ = (selector) => document.querySelector(selector);
 
         function escapeHtml(value) {
             return String(value ?? '').replace(/[&<>"']/g, function(char) {
@@ -75,34 +71,38 @@
         }
 
         function updateClock() {
-            $('#clock').text(new Date().toLocaleString());
+            $('#clock').textContent = new Date().toLocaleString();
         }
 
         function showGuestPrompt(logId) {
             if (!logId) return;
-            $('#guestLogId').val(logId);
-            $('#guestName').val('');
-            $('#guestPanel').prop('hidden', false);
-            $('#guestMessage').removeClass('error success').text('Guest accepted. Please type your temporary login name.');
-            setTimeout(function() { $('#guestName').trigger('focus'); }, 50);
+            $('#guestLogId').value = logId;
+            $('#guestName').value = '';
+            $('#guestPanel').hidden = false;
+            $('#guestMessage').className = 'message';
+            $('#guestMessage').textContent = 'Guest accepted. Please type your temporary login name.';
+            setTimeout(function() { $('#guestName').focus(); }, 50);
         }
 
         function showGreeting(message) {
             clearTimeout(greetingTimer);
             const tapMessage = document.getElementById('tapMessage');
-            $('#tapMessage').removeClass('tap-flash').text(message || 'Tap recorded');
-            void tapMessage.offsetWidth;
-            $('#tapMessage').addClass('tap-flash');
-            $('#tapSubtext').text('Time-in saved. Welcome.');
+            tapMessage.classList.remove('tap-flash');
+            tapMessage.textContent = message || 'Tap recorded';
+            tapMessage.classList.add('tap-flash');
+            $('#tapSubtext').textContent = message && message.toLowerCase().startsWith('tap out')
+                ? 'Time-out saved. Thank you.'
+                : 'Time-in saved. Welcome.';
             greetingTimer = setTimeout(function() {
-                $('#tapMessage').removeClass('tap-flash').text('Ready for tap-in');
-                $('#tapSubtext').text('Your time-in will be recorded automatically.');
+                tapMessage.classList.remove('tap-flash');
+                tapMessage.textContent = 'Ready for tap-in or tap-out';
+                $('#tapSubtext').textContent = 'Your next tap will be recorded automatically.';
             }, 3200);
         }
 
         function renderLogs(rows) {
             if (!Array.isArray(rows) || rows.length === 0) {
-                $('#logsBody').html('<tr><td colspan="3">No logs yet.</td></tr>');
+                $('#logsBody').innerHTML = '<tr><td colspan="3">No logs yet.</td></tr>';
                 return;
             }
             const html = rows.slice(0, 8).map(function(row) {
@@ -112,26 +112,27 @@
                     <td><span class="status-pill">${escapeHtml(row.status)}</span></td>
                 </tr>`;
             }).join('');
-            $('#logsBody').html(html);
+            $('#logsBody').innerHTML = html;
         }
 
         function fetchLogs() {
-            $.ajax({
-                url: '/user_logs_info',
-                type: 'GET',
-                success: function(data) {
+            fetch('/user_logs_info')
+                .then((response) => response.ok ? response.json() : Promise.reject(response))
+                .then((data) => {
                     renderLogs(data);
-                    $('#logsMessage').removeClass('error').text('');
-                },
-                error: function(xhr) {
-                    const response = xhr.responseJSON || {};
-                    $('#logsMessage').addClass('error').text(response.error || 'Unable to load logs.');
-                }
-            });
+                    $('#logsMessage').className = 'message';
+                    $('#logsMessage').textContent = '';
+                })
+                .catch(() => {
+                    $('#logsMessage').className = 'message error';
+                    $('#logsMessage').textContent = 'Unable to load logs.';
+                });
         }
 
         function pollLatestTap() {
-            $.getJSON('/latest_tap?since=' + tapCounter, function(resp) {
+            fetch('/latest_tap?since=' + tapCounter)
+                .then((response) => response.json())
+                .then((resp) => {
                 if (!resp.changed) return;
                 tapCounter = resp.tap_counter;
                 showGreeting(resp.message || 'Tap recorded');
@@ -140,30 +141,31 @@
             });
         }
 
-        $('#guestForm').on('submit', function(event) {
+        $('#guestForm').addEventListener('submit', function(event) {
             event.preventDefault();
-            $.ajax({
-                url: '/guest_name',
-                type: 'POST',
-                data: $(this).serialize(),
-                success: function(response) {
-                    $('#guestMessage').removeClass('error').addClass('success').text(response.message || 'Guest name saved.');
-                    $('#guestPanel').prop('hidden', true);
+            fetch('/guest_name', {
+                method: 'POST',
+                body: new FormData(this),
+            })
+                .then((response) => response.ok ? response.json() : response.json().then((data) => Promise.reject(data)))
+                .then((response) => {
+                    $('#guestMessage').className = 'message success';
+                    $('#guestMessage').textContent = response.message || 'Guest name saved.';
+                    $('#guestPanel').hidden = true;
                     showGreeting(response.message || 'Guest name saved.');
                     fetchLogs();
-                },
-                error: function(xhr) {
-                    const response = xhr.responseJSON || {};
-                    $('#guestMessage').removeClass('success').addClass('error').text(response.error || 'Unable to save guest name.');
-                }
-            });
+                })
+                .catch((response) => {
+                    $('#guestMessage').className = 'message error';
+                    $('#guestMessage').textContent = response.error || 'Unable to save guest name.';
+                });
         });
 
-        $('#refreshLogs').on('click', fetchLogs);
+        $('#refreshLogs').addEventListener('click', fetchLogs);
         updateClock();
         fetchLogs();
         setInterval(updateClock, 1000);
-        setInterval(pollLatestTap, 400);
+        setInterval(pollLatestTap, 900);
     </script>
 </body>
 </html>
