@@ -178,60 +178,8 @@ def get_logs(limit=100):
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
             """
-            SELECT
-                id,
-                nfc_code,
-                DATE_FORMAT(date_logged, '%Y-%m-%d %H:%i:%s') AS date_logged,
-                COALESCE(student_no, '') AS student_no,
-                COALESCE(lastname, 'GUEST') AS lastname,
-                COALESCE(firstname, '') AS firstname,
-                COALESCE(fullname, 'Guest') AS fullname,
-                CASE
-                    WHEN student_no IS NULL THEN 'GUEST_PENDING'
-                    WHEN tap_number % 2 = 1 THEN 'TAP_IN'
-                    ELSE 'TAP_OUT'
-                END AS status,
-                CASE WHEN tap_number % 2 = 1 THEN 'LOGIN' ELSE 'LOGOUT' END AS event_type,
-                CASE
-                    WHEN tap_number % 2 = 1 THEN DATE_FORMAT(date_logged, '%Y-%m-%d %H:%i:%s')
-                    ELSE DATE_FORMAT(previous_tap_time, '%Y-%m-%d %H:%i:%s')
-                END AS time_entered,
-                CASE
-                    WHEN tap_number % 2 = 0 THEN DATE_FORMAT(date_logged, '%Y-%m-%d %H:%i:%s')
-                    ELSE NULL
-                END AS time_left,
-                CASE
-                    WHEN tap_number % 2 = 0 AND previous_tap_time IS NOT NULL
-                        THEN TIMESTAMPDIFF(SECOND, previous_tap_time, date_logged)
-                    ELSE NULL
-                END AS duration_seconds,
-                CASE
-                    WHEN tap_number % 2 = 0 AND previous_tap_time IS NOT NULL
-                        THEN TIME_FORMAT(SEC_TO_TIME(TIMESTAMPDIFF(SECOND, previous_tap_time, date_logged)), '%H:%i:%s')
-                    ELSE NULL
-                END AS duration_label
-            FROM (
-                SELECT
-                    l.id,
-                    l.nfc_code,
-                    l.date_logged,
-                    u.student_no,
-                    u.lastname,
-                    u.firstname,
-                    u.fullname,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY l.nfc_code, DATE(l.date_logged)
-                        ORDER BY l.date_logged, l.id
-                    ) AS tap_number,
-                    LAG(l.date_logged) OVER (
-                        PARTITION BY l.nfc_code, DATE(l.date_logged)
-                        ORDER BY l.date_logged, l.id
-                    ) AS previous_tap_time
-                FROM user_logs l
-                LEFT JOIN users u ON u.nfc_code = l.nfc_code
-                WHERE l.date_logged >= CURDATE()
-                  AND l.date_logged < CURDATE() + INTERVAL 1 DAY
-            ) today_logs
+            SELECT *
+            FROM user_logs_info
             ORDER BY date_logged DESC, id DESC
             LIMIT %s
             """,

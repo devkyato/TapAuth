@@ -63,133 +63,42 @@ CREATE TABLE IF NOT EXISTS firebase_sync_queue (
 
 CREATE OR REPLACE VIEW user_logs_info AS
 SELECT
-    l.id,
+    MAX(l.id) AS id,
     l.nfc_code,
-    DATE_FORMAT(l.date_logged, '%Y-%m-%d %H:%i:%s') AS date_logged,
+    DATE_FORMAT(MAX(l.date_logged), '%Y-%m-%d %H:%i:%s') AS date_logged,
     COALESCE(u.student_no, '') AS student_no,
     COALESCE(u.lastname, 'GUEST') AS lastname,
     COALESCE(u.firstname, '') AS firstname,
     COALESCE(u.fullname, 'Guest') AS fullname,
     CASE
         WHEN u.id IS NULL THEN 'GUEST_PENDING'
-        WHEN (
-            SELECT COUNT(*)
-            FROM user_logs day_logs
-            WHERE day_logs.nfc_code = l.nfc_code
-              AND day_logs.date_logged >= DATE(l.date_logged)
-              AND day_logs.date_logged < DATE(l.date_logged) + INTERVAL 1 DAY
-              AND (
-                day_logs.date_logged < l.date_logged
-                OR (day_logs.date_logged = l.date_logged AND day_logs.id <= l.id)
-              )
-        ) % 2 = 1 THEN 'TAP_IN'
-        ELSE 'TAP_OUT'
+        WHEN COUNT(*) >= 2 THEN 'TAP_OUT'
+        ELSE 'TAP_IN'
     END AS status,
     CASE
-        WHEN (
-            SELECT COUNT(*)
-            FROM user_logs day_logs
-            WHERE day_logs.nfc_code = l.nfc_code
-              AND day_logs.date_logged >= DATE(l.date_logged)
-              AND day_logs.date_logged < DATE(l.date_logged) + INTERVAL 1 DAY
-              AND (
-                day_logs.date_logged < l.date_logged
-                OR (day_logs.date_logged = l.date_logged AND day_logs.id <= l.id)
-              )
-        ) % 2 = 1 THEN 'LOGIN'
-        ELSE 'LOGOUT'
+        WHEN COUNT(*) >= 2 THEN 'LOGOUT'
+        ELSE 'LOGIN'
     END AS event_type,
+    DATE_FORMAT(MIN(l.date_logged), '%Y-%m-%d %H:%i:%s') AS time_entered,
     CASE
-        WHEN (
-            SELECT COUNT(*)
-            FROM user_logs day_logs
-            WHERE day_logs.nfc_code = l.nfc_code
-              AND day_logs.date_logged >= DATE(l.date_logged)
-              AND day_logs.date_logged < DATE(l.date_logged) + INTERVAL 1 DAY
-              AND (
-                day_logs.date_logged < l.date_logged
-                OR (day_logs.date_logged = l.date_logged AND day_logs.id <= l.id)
-              )
-        ) % 2 = 1 THEN DATE_FORMAT(l.date_logged, '%Y-%m-%d %H:%i:%s')
-        ELSE DATE_FORMAT((
-            SELECT previous_log.date_logged
-            FROM user_logs previous_log
-            WHERE previous_log.nfc_code = l.nfc_code
-              AND previous_log.date_logged >= DATE(l.date_logged)
-              AND previous_log.date_logged < DATE(l.date_logged) + INTERVAL 1 DAY
-              AND (
-                previous_log.date_logged < l.date_logged
-                OR (previous_log.date_logged = l.date_logged AND previous_log.id < l.id)
-              )
-            ORDER BY previous_log.date_logged DESC, previous_log.id DESC
-            LIMIT 1
-        ), '%Y-%m-%d %H:%i:%s')
-    END AS time_entered,
-    CASE
-        WHEN (
-            SELECT COUNT(*)
-            FROM user_logs day_logs
-            WHERE day_logs.nfc_code = l.nfc_code
-              AND day_logs.date_logged >= DATE(l.date_logged)
-              AND day_logs.date_logged < DATE(l.date_logged) + INTERVAL 1 DAY
-              AND (
-                day_logs.date_logged < l.date_logged
-                OR (day_logs.date_logged = l.date_logged AND day_logs.id <= l.id)
-              )
-        ) % 2 = 0 THEN DATE_FORMAT(l.date_logged, '%Y-%m-%d %H:%i:%s')
+        WHEN COUNT(*) >= 2 THEN DATE_FORMAT(MAX(l.date_logged), '%Y-%m-%d %H:%i:%s')
         ELSE NULL
     END AS time_left,
     CASE
-        WHEN (
-            SELECT COUNT(*)
-            FROM user_logs day_logs
-            WHERE day_logs.nfc_code = l.nfc_code
-              AND day_logs.date_logged >= DATE(l.date_logged)
-              AND day_logs.date_logged < DATE(l.date_logged) + INTERVAL 1 DAY
-              AND (
-                day_logs.date_logged < l.date_logged
-                OR (day_logs.date_logged = l.date_logged AND day_logs.id <= l.id)
-              )
-        ) % 2 = 0 THEN TIMESTAMPDIFF(SECOND, (
-            SELECT previous_log.date_logged
-            FROM user_logs previous_log
-            WHERE previous_log.nfc_code = l.nfc_code
-              AND previous_log.date_logged >= DATE(l.date_logged)
-              AND previous_log.date_logged < DATE(l.date_logged) + INTERVAL 1 DAY
-              AND (
-                previous_log.date_logged < l.date_logged
-                OR (previous_log.date_logged = l.date_logged AND previous_log.id < l.id)
-              )
-            ORDER BY previous_log.date_logged DESC, previous_log.id DESC
-            LIMIT 1
-        ), l.date_logged)
+        WHEN COUNT(*) >= 2 THEN TIMESTAMPDIFF(SECOND, MIN(l.date_logged), MAX(l.date_logged))
         ELSE NULL
     END AS duration_seconds,
     CASE
-        WHEN (
-            SELECT COUNT(*)
-            FROM user_logs day_logs
-            WHERE day_logs.nfc_code = l.nfc_code
-              AND day_logs.date_logged >= DATE(l.date_logged)
-              AND day_logs.date_logged < DATE(l.date_logged) + INTERVAL 1 DAY
-              AND (
-                day_logs.date_logged < l.date_logged
-                OR (day_logs.date_logged = l.date_logged AND day_logs.id <= l.id)
-              )
-        ) % 2 = 0 THEN TIME_FORMAT(SEC_TO_TIME(TIMESTAMPDIFF(SECOND, (
-            SELECT previous_log.date_logged
-            FROM user_logs previous_log
-            WHERE previous_log.nfc_code = l.nfc_code
-              AND previous_log.date_logged >= DATE(l.date_logged)
-              AND previous_log.date_logged < DATE(l.date_logged) + INTERVAL 1 DAY
-              AND (
-                previous_log.date_logged < l.date_logged
-                OR (previous_log.date_logged = l.date_logged AND previous_log.id < l.id)
-              )
-            ORDER BY previous_log.date_logged DESC, previous_log.id DESC
-            LIMIT 1
-        ), l.date_logged)), '%H:%i:%s')
+        WHEN COUNT(*) >= 2 THEN TIME_FORMAT(SEC_TO_TIME(TIMESTAMPDIFF(SECOND, MIN(l.date_logged), MAX(l.date_logged))), '%H:%i:%s')
         ELSE NULL
     END AS duration_label
 FROM user_logs l
-LEFT JOIN users u ON u.nfc_code = l.nfc_code;
+LEFT JOIN users u ON u.nfc_code = l.nfc_code
+GROUP BY
+    l.nfc_code,
+    DATE(l.date_logged),
+    u.id,
+    u.student_no,
+    u.lastname,
+    u.firstname,
+    u.fullname;
