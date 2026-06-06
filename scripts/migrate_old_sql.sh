@@ -21,6 +21,7 @@ DB_USER="${AIRHUB_DB_USER:-root}"
 DB_PASSWORD="${AIRHUB_DB_PASSWORD:-}"
 LEGACY_DB="${DB_NAME}_legacy_import_$(date +%Y%m%d_%H%M%S)"
 BACKUP_DIR="$PROJECT_DIR/backups/$(date +%Y%m%d-%H%M%S)-before-old-import"
+SANITIZED_SQL="$BACKUP_DIR/old_import_without_create_or_use.sql"
 MYSQL_AUTH=(-u "$DB_USER")
 
 if [[ -n "$DB_PASSWORD" ]]; then
@@ -31,7 +32,8 @@ mkdir -p "$BACKUP_DIR"
 mysqldump --single-transaction --routines --triggers --events "${MYSQL_AUTH[@]}" "$DB_NAME" > "$BACKUP_DIR/${DB_NAME}_before_import.sql"
 
 mysql "${MYSQL_AUTH[@]}" -e "CREATE DATABASE \`$LEGACY_DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql "${MYSQL_AUTH[@]}" "$LEGACY_DB" < "$OLD_SQL"
+sed -E '/^(CREATE DATABASE|USE |\/\*!.*CREATE DATABASE|\/\*!.*USE )/Id' "$OLD_SQL" > "$SANITIZED_SQL"
+mysql "${MYSQL_AUTH[@]}" "$LEGACY_DB" < "$SANITIZED_SQL"
 
 mysql "${MYSQL_AUTH[@]}" <<SQL
 ALTER TABLE \`$LEGACY_DB\`.users ADD COLUMN IF NOT EXISTS middlename VARCHAR(100) NOT NULL DEFAULT '';
