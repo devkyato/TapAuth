@@ -20,6 +20,17 @@ CREATE TABLE IF NOT EXISTS users (
     INDEX idx_users_nfc_code (nfc_code)
 );
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS student_no VARCHAR(64) NOT NULL DEFAULT '' AFTER id;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS lastname VARCHAR(100) NOT NULL DEFAULT '' AFTER student_no;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS firstname VARCHAR(100) NOT NULL DEFAULT '' AFTER lastname;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS middlename VARCHAR(100) NOT NULL DEFAULT '' AFTER firstname;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS fullname VARCHAR(255) NOT NULL DEFAULT '' AFTER middlename;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS course VARCHAR(100) NOT NULL DEFAULT '' AFTER fullname;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS project_type VARCHAR(100) NOT NULL DEFAULT '' AFTER course;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS room VARCHAR(100) NOT NULL DEFAULT '' AFTER project_type;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS nfc_code VARCHAR(128) NOT NULL DEFAULT '' AFTER room;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER nfc_code;
+
 CREATE TABLE IF NOT EXISTS user_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nfc_code VARCHAR(128) NOT NULL,
@@ -28,6 +39,14 @@ CREATE TABLE IF NOT EXISTS user_logs (
     INDEX idx_user_logs_date_logged (date_logged),
     INDEX idx_user_logs_card_day (nfc_code, date_logged)
 );
+
+ALTER TABLE user_logs ADD COLUMN IF NOT EXISTS nfc_code VARCHAR(128) NOT NULL DEFAULT '' AFTER id;
+ALTER TABLE user_logs ADD COLUMN IF NOT EXISTS date_logged TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER nfc_code;
+CREATE INDEX IF NOT EXISTS idx_users_student_no ON users (student_no);
+CREATE INDEX IF NOT EXISTS idx_users_nfc_code ON users (nfc_code);
+CREATE INDEX IF NOT EXISTS idx_user_logs_nfc_code ON user_logs (nfc_code);
+CREATE INDEX IF NOT EXISTS idx_user_logs_date_logged ON user_logs (date_logged);
+CREATE INDEX IF NOT EXISTS idx_user_logs_card_day ON user_logs (nfc_code, date_logged);
 
 CREATE TABLE IF NOT EXISTS firebase_sync_queue (
     id INT AUTO_INCREMENT PRIMARY KEY,
