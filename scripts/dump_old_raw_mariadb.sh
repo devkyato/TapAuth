@@ -108,7 +108,7 @@ Old database dump complete:
 Next import into the active Airhub DB:
   bash scripts/migrate_old_sql.sh $OUT_SQL
 
-Then upload MySQL/phpMyAdmin data to Firestore:
+Then upload MySQL/phpMyAdmin data to Realtime Database:
   source .venv/bin/activate
-  python scripts/sync_firestore.py
+  python scripts/sync_realtime_db.py
 EOF

@@ -2,38 +2,36 @@
 
 APC Airhub NFC tap-in/tap-out, registration, local MySQL, and Firebase Hosting system.
 
-The Raspberry Pi is the source of truth for physical card taps. It records every tap into local MySQL/MariaDB for phpMyAdmin, then optionally syncs public-safe data to Firestore. Firebase Hosting reads Firestore and shows the live public tap-in/tap-out screen.
+The Raspberry Pi is the source of truth for physical card taps. It records every tap into local MySQL/MariaDB for phpMyAdmin, then optionally syncs public-safe data to Firebase Realtime Database. Firebase Hosting reads Realtime Database and shows the live public tap-in/tap-out screen.
 
 ## Main Files
 
 - `app.py`: Flask routes and NFC scanner wiring
 - `database.py`: local MySQL/phpMyAdmin data access
-- `firebase_adapter.py`: Raspberry Pi to Firestore sync
+- `firebase_adapter.py`: Raspberry Pi to Realtime Database sync
 - `schema.sql`: local MySQL schema and public log view
 - `templates/login.html`: local Raspberry Pi tap-in/tap-out kiosk
 - `templates/index.html`: hidden registration page at `/airhub-register`
-- `hosting/`: Firebase Hosting public app backed by Firestore
+- `hosting/`: Firebase Hosting public app backed by Realtime Database
 - `scripts/setup_raspberry_pi.sh`: Raspberry Pi setup/service installer
 - `scripts/migrate_old_sql.sh`: safe old SQL import into the active MySQL DB
-- `scripts/sync_firestore.py`: full MySQL to Firestore backfill
+- `scripts/sync_realtime_db.py`: full MySQL to Realtime Database backfill
 - `scripts/export_database.sh`: SQL and CSV-compatible local exports
 
 ## Environment
 
 Copy `.env.example` to `.env` on each machine and fill in local values there. `.env` is ignored by Git and should not be uploaded.
 
-For Firestore sync on the Raspberry Pi, set:
+Realtime Database sync uses only the database URL and legacy database secret. It does not use `GOOGLE_APPLICATION_CREDENTIALS` or a Firebase Admin SDK service-account JSON.
 
 ```env
 AIRHUB_FIREBASE_ENABLED=true
-AIRHUB_FIREBASE_MODE=firestore
-AIRHUB_FIREBASE_PROJECT_ID=airhub-login
-GOOGLE_APPLICATION_CREDENTIALS=/home/mako-airhub/loginsys_airhub/firebase-service-account.json
+AIRHUB_FIREBASE_MODE=realtime_db
+AIRHUB_FIREBASE_DATABASE_URL=https://airhub-login-default-rtdb.asia-southeast1.firebasedatabase.app/
+AIRHUB_FIREBASE_DATABASE_SECRET=<legacy-database-secret>
 ```
 
-The service account JSON must stay on the Raspberry Pi and must not be committed.
-
-For the simpler Realtime Database-only setup, configure the legacy database secret locally on the Pi instead of using a service-account JSON:
+Configure the secret locally on the Pi:
 
 ```bash
 cd /home/mako-airhub/loginsys_airhub
@@ -41,7 +39,7 @@ bash scripts/configure_realtime_db_secret.sh \
   https://airhub-login-default-rtdb.asia-southeast1.firebasedatabase.app/ \
   <legacy-database-secret>
 source .venv/bin/activate
-python scripts/sync_firestore.py
+python scripts/sync_realtime_db.py
 ```
 
 
@@ -63,7 +61,7 @@ cd /home/mako-airhub/loginsys_airhub
 bash scripts/update_pi_from_github.sh
 ```
 
-That update script pulls `main`, installs Python requirements, creates/updates the MySQL database, applies `schema.sql`, restarts the auto-run service, and uploads MySQL data to Firestore when `AIRHUB_FIREBASE_ENABLED=true`.
+That update script pulls `main`, installs Python requirements, creates/updates the MySQL database, applies `schema.sql`, restarts the auto-run service, and uploads MySQL data to Realtime Database when `AIRHUB_FIREBASE_ENABLED=true`.
 
 ## MySQL Database Setup
 
@@ -132,50 +130,38 @@ Import the old SQL without wiping current data:
 bash scripts/migrate_old_sql.sh /path/to/old_airhub.sql
 ```
 
-Then copy all current MySQL users/logs to Firestore:
+Then copy all current MySQL users/logs to Realtime Database:
 
 ```bash
 source .venv/bin/activate
-python scripts/sync_firestore.py
+python scripts/sync_realtime_db.py
 ```
 
-If Firebase prints `Invalid JWT Signature`, first sync the Raspberry Pi clock and then run the Firebase diagnostic:
+If Firebase sync fails, run the diagnostic:
 
 ```bash
-sudo timedatectl set-ntp true
-sudo systemctl restart systemd-timesyncd
-timedatectl
 source .venv/bin/activate
 python scripts/diagnose_firebase.py
 ```
 
-If the diagnostic still reports `Invalid JWT Signature` after NTP is synchronized, download a fresh Firebase Admin SDK service-account JSON from the `airhub-login` Firebase project and replace the file pointed to by `GOOGLE_APPLICATION_CREDENTIALS`.
-
-To install a fresh key on the Raspberry Pi without committing it:
-
-```bash
-cd /home/mako-airhub/loginsys_airhub
-bash scripts/install_firebase_key.sh /path/to/airhub-login-firebase-adminsdk-key.json
-source .venv/bin/activate
-python scripts/diagnose_firebase.py
-```
+The diagnostic should show `database_secret_configured: True` and `realtime_database_target: True`.
 
 Old registrations stay active because NFC matching still uses the local MySQL `users.nfc_code` field. Import old data before registering new cards so previously registered cards are recognized immediately by the kiosk.
 
 ## Firebase Hosting
 
-The hosting app lives in `hosting/` and reads from Firestore collection `airhub_logs`. It does not show NFC codes.
+The hosting app lives in `hosting/` and reads from Realtime Database path `airhub/logs`. It does not show NFC codes.
 
-Deploy hosting and Firestore rules. On Raspberry Pi, install Firebase CLI with npm, not pip:
+Deploy hosting and Realtime Database rules. On Raspberry Pi, install Firebase CLI with npm, not pip:
 
 ```bash
 sudo apt-get install -y nodejs npm
 sudo npm install -g firebase-tools
 firebase login --no-localhost
-firebase deploy --only hosting,firestore:rules
+firebase deploy --only hosting,database
 ```
 
-Firestore public reads are allowed only for `airhub_logs`. Writes are blocked from the browser; the Raspberry Pi writes using the Firebase Admin service account.
+Realtime Database public reads are allowed only for `airhub/logs`. Writes are blocked from the browser; the Raspberry Pi writes with the local legacy database secret in `.env`.
 
 ## Local Backups
 
@@ -260,5 +246,5 @@ Merge into active MySQL/phpMyAdmin and upload to Realtime Database:
 ```bash
 bash scripts/migrate_old_sql.sh /home/mako-airhub/old_airhub_real_dump.sql
 source .venv/bin/activate
-python scripts/sync_firestore.py
+python scripts/sync_realtime_db.py
 ```
