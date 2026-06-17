@@ -63,42 +63,52 @@ CREATE TABLE IF NOT EXISTS firebase_sync_queue (
 
 CREATE OR REPLACE VIEW user_logs_info AS
 SELECT
-    MAX(l.id) AS id,
-    l.nfc_code,
-    DATE_FORMAT(MAX(l.date_logged), '%Y-%m-%d %H:%i:%s') AS date_logged,
+    numbered_logs.id,
+    numbered_logs.nfc_code,
+    DATE_FORMAT(numbered_logs.date_logged, '%Y-%m-%d %H:%i:%s') AS date_logged,
     COALESCE(u.student_no, '') AS student_no,
     COALESCE(u.lastname, 'GUEST') AS lastname,
     COALESCE(u.firstname, '') AS firstname,
     COALESCE(u.fullname, 'Guest') AS fullname,
     CASE
         WHEN u.id IS NULL THEN 'GUEST_PENDING'
-        WHEN COUNT(*) >= 2 THEN 'TAP_OUT'
+        WHEN MOD(numbered_logs.tap_number, 2) = 0 THEN 'TAP_OUT'
         ELSE 'TAP_IN'
     END AS status,
     CASE
-        WHEN COUNT(*) >= 2 THEN 'LOGOUT'
+        WHEN MOD(numbered_logs.tap_number, 2) = 0 THEN 'LOGOUT'
         ELSE 'LOGIN'
     END AS event_type,
-    DATE_FORMAT(MIN(l.date_logged), '%Y-%m-%d %H:%i:%s') AS time_entered,
+    DATE_FORMAT(
+        CASE
+            WHEN MOD(numbered_logs.tap_number, 2) = 0 THEN numbered_logs.previous_date_logged
+            ELSE numbered_logs.date_logged
+        END,
+        '%Y-%m-%d %H:%i:%s'
+    ) AS time_entered,
     CASE
-        WHEN COUNT(*) >= 2 THEN DATE_FORMAT(MAX(l.date_logged), '%Y-%m-%d %H:%i:%s')
+        WHEN MOD(numbered_logs.tap_number, 2) = 0 THEN DATE_FORMAT(numbered_logs.date_logged, '%Y-%m-%d %H:%i:%s')
         ELSE NULL
     END AS time_left,
     CASE
-        WHEN COUNT(*) >= 2 THEN TIMESTAMPDIFF(SECOND, MIN(l.date_logged), MAX(l.date_logged))
+        WHEN MOD(numbered_logs.tap_number, 2) = 0 THEN TIMESTAMPDIFF(SECOND, numbered_logs.previous_date_logged, numbered_logs.date_logged)
         ELSE NULL
     END AS duration_seconds,
     CASE
-        WHEN COUNT(*) >= 2 THEN TIME_FORMAT(SEC_TO_TIME(TIMESTAMPDIFF(SECOND, MIN(l.date_logged), MAX(l.date_logged))), '%H:%i:%s')
+        WHEN MOD(numbered_logs.tap_number, 2) = 0 THEN TIME_FORMAT(SEC_TO_TIME(TIMESTAMPDIFF(SECOND, numbered_logs.previous_date_logged, numbered_logs.date_logged)), '%H:%i:%s')
         ELSE NULL
     END AS duration_label
-FROM user_logs l
-LEFT JOIN users u ON u.nfc_code = l.nfc_code
-GROUP BY
-    l.nfc_code,
-    DATE(l.date_logged),
-    u.id,
-    u.student_no,
-    u.lastname,
-    u.firstname,
-    u.fullname;
+FROM (
+    SELECT
+        l.*,
+        ROW_NUMBER() OVER (
+            PARTITION BY l.nfc_code, DATE(l.date_logged)
+            ORDER BY l.date_logged ASC, l.id ASC
+        ) AS tap_number,
+        LAG(l.date_logged) OVER (
+            PARTITION BY l.nfc_code, DATE(l.date_logged)
+            ORDER BY l.date_logged ASC, l.id ASC
+        ) AS previous_date_logged
+    FROM user_logs l
+) numbered_logs
+LEFT JOIN users u ON u.nfc_code = numbered_logs.nfc_code;
