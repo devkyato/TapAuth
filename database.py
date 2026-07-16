@@ -115,6 +115,26 @@ def insert_log(nfc_code):
         close(cursor, conn)
 
 
+def is_user_checked_in(nfc_code):
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT COUNT(*) AS tap_count
+            FROM user_logs
+            WHERE nfc_code=%s AND DATE(date_logged)=CURDATE()
+            """,
+            (nfc_code,),
+        )
+        row = cursor.fetchone() or {}
+        return int(row.get("tap_count") or 0) % 2 == 1
+    finally:
+        close(cursor, conn)
+
+
 def get_user_fullname(nfc_code):
     user = get_user_by_nfc(nfc_code)
     return user["fullname"] if user else None

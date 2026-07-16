@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
+import hmac
 import queue
 import threading
+from pathlib import Path
 
-from flask import Flask, jsonify, redirect, render_template, request, url_for
+from flask import Flask, Response, jsonify, redirect, render_template, request, send_from_directory, url_for
 
 from config import ACCESS_CONFIG, APP_CONFIG, WIFI_CONFIG
 from database import (
@@ -10,7 +12,9 @@ from database import (
     get_firebase_queue_count,
     get_log_by_id,
     get_logs,
+    get_user_by_nfc,
     get_user_fullname,
+    is_user_checked_in,
     insert_log,
     test_database_connection,
 )
@@ -20,6 +24,8 @@ from sync_service import retry_pending, sync_log_or_queue, sync_user_or_queue
 
 app = Flask(__name__)
 sync_queue = queue.Queue(maxsize=500)
+tap_action_lock = threading.Lock()
+processed_tap_counters = set()
 
 
 def enqueue_sync(record_type, record):
@@ -48,15 +54,28 @@ threading.Thread(target=firebase_sync_worker, daemon=True).start()
 
 
 def handle_tap(uid):
-    log_record = insert_log(uid)
-    enqueue_sync("log", log_record)
-    fullname = log_record.get("fullname") if log_record else get_user_fullname(uid)
-    if not fullname or (log_record and str(log_record.get("status", "")).startswith("GUEST")):
-        return {"message": "Guest tap recorded.", "log_id": log_record.get("id")}
-    if log_record.get("status") == "TAP_OUT":
-        duration = log_record.get("duration_label") or "00:00:00"
-        return {"message": f"Log out: {fullname}. Stayed {duration}.", "log_id": log_record.get("id")}
-    return {"message": f"Login: {fullname}", "log_id": log_record.get("id")}
+    """Publish the card event first; the kiosk asks what the tap is for."""
+    try:
+        user = get_user_by_nfc(uid)
+        checked_in = is_user_checked_in(uid) if user else False
+    except Exception as exc:
+        app.logger.warning("Unable to identify tapped card: %s", exc)
+        user = None
+        checked_in = False
+    if not user:
+        return {"message": "School ID detected"}
+    return {
+        "message": f"{user.get('fullname')} · ID detected",
+        "payload": {
+            "user": {
+                "firstname": user.get("firstname"),
+                "fullname": user.get("fullname"),
+                "student_no": user.get("student_no"),
+                "course": user.get("course"),
+                "checked_in": checked_in,
+            }
+        },
+    }
 
 
 nfc_reader = NFCStandbyReader(on_tap=handle_tap)
@@ -74,14 +93,30 @@ def registration_authorized():
     )
     return supplied == code
 
+
+def render_airhub_page():
+    page = (Path(app.root_path) / "index.html").read_text(encoding="utf-8")
+    page = page.replace('data-runtime="preview"', 'data-runtime="pi"', 1)
+    return Response(page, mimetype="text/html", headers={"Cache-Control": "no-store"})
+
 @app.route("/")
 def public_logs():
-    return render_template("login.html")
+    return render_airhub_page()
 
 
 @app.route("/login")
 def login():
-    return render_template("login.html")
+    return render_airhub_page()
+
+
+@app.route("/styles.css")
+def airhub_styles():
+    return send_from_directory(app.root_path, "styles.css", max_age=0)
+
+
+@app.route("/script.js")
+def airhub_script():
+    return send_from_directory(app.root_path, "script.js", max_age=0)
 
 
 @app.route("/airhub-register")
@@ -131,9 +166,75 @@ def latest_tap():
     return jsonify({"changed": True, **data})
 
 
+@app.route("/tap_action", methods=["POST"])
+def tap_action():
+    data = request.get_json(silent=True) or {}
+    action = data.get("action")
+    uid = str(data.get("uid") or "").strip()
+    try:
+        tap_counter = int(data.get("tap_counter"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid tap session."}), 400
+
+    if action not in {"check_in", "check_out", "appointment"} or not uid:
+        return jsonify({"error": "Invalid tap action."}), 400
+
+    latest = nfc_reader.latest_tap(-1)
+    if not latest or latest.get("uid") != uid or latest.get("tap_counter") != tap_counter:
+        return jsonify({"error": "This tap has expired. Please tap your ID again."}), 409
+
+    with tap_action_lock:
+        if tap_counter in processed_tap_counters:
+            return jsonify({"error": "This tap has already been used."}), 409
+
+        if action == "appointment":
+            fullname = get_user_fullname(uid)
+            if not fullname:
+                return jsonify({"error": "This ID is not registered for appointments."}), 403
+            return jsonify({"success": True, "message": "Choose an appointment service."})
+
+        if action == "check_out" and not is_user_checked_in(uid):
+            processed_tap_counters.add(tap_counter)
+            nfc_reader.update_user_state(uid, False)
+            return jsonify({"success": True, "message": "Already checked out.", "log": None})
+
+        if action == "check_in" and is_user_checked_in(uid):
+            processed_tap_counters.add(tap_counter)
+            nfc_reader.update_user_state(uid, True)
+            return jsonify({"success": True, "message": "Already checked in.", "log": None})
+
+        log_record = insert_log(uid)
+        if not log_record:
+            return jsonify({"error": "Unable to save attendance."}), 500
+        processed_tap_counters.add(tap_counter)
+        nfc_reader.update_user_state(uid, log_record.get("status") == "TAP_IN")
+
+        if len(processed_tap_counters) > 256:
+            processed_tap_counters.remove(min(processed_tap_counters))
+
+    enqueue_sync("log", log_record)
+    fullname = log_record.get("fullname") or get_user_fullname(uid) or "Guest"
+    if log_record.get("status") == "TAP_OUT":
+        duration = log_record.get("duration_label") or "00:00:00"
+        message = f"Check out: {fullname}. Stayed {duration}."
+    else:
+        message = f"Check in: {fullname}"
+    return jsonify({"success": True, "message": message, "log": log_record})
+
+
 @app.route("/get_nfc_code")
 def get_nfc_code():
     return jsonify({"nfc_code": nfc_reader.status().get("last_uid")})
+
+
+@app.route("/validate_registration_code", methods=["POST"])
+def validate_registration_code():
+    data = request.get_json(silent=True) or {}
+    supplied = str(data.get("code") or "")
+    expected = str(ACCESS_CONFIG.get("registration_code") or "")
+    if not expected or not hmac.compare_digest(supplied, expected):
+        return jsonify({"error": "Incorrect registration code."}), 403
+    return jsonify({"success": True})
 
 
 @app.route("/register", methods=["POST"])

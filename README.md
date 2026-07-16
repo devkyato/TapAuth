@@ -1,4 +1,38 @@
-# loginsys_airhub
+# School of Engineering Reservation and Airhub NFC System
+
+This workspace now consolidates the existing Raspberry Pi NFC project with a new responsive reservation preview.
+
+## Current preview
+
+The root web files provide the new two-service experience:
+
+- `index.html`: teacher appointment and 3D-printing reservation page
+- `styles.css`: responsive white-and-orange interface
+- `script.js`: NFC preview gate, validation, local preview storage, and queue rendering
+
+Start the preview from the project root:
+
+```bash
+python -m http.server 4173 --bind 127.0.0.1
+```
+
+Then open `http://127.0.0.1:4173/`.
+
+The **Preview ID Tap** button is intentionally a local demonstration control. Production submissions will require a short-lived, single-use NFC session created by the Raspberry Pi and verified by the Vercel API.
+
+## Consolidated production components
+
+- Raspberry Pi, Flask, ACR122U, and local MySQL remain the physical tap source of truth.
+- Firebase remains the shared data and synchronization layer.
+- Vercel will host the reservation interface and protected API routes.
+- Cloudflare Turnstile will protect public request endpoints.
+- Transactional email will send student confirmations and personnel approval links.
+
+Local secrets must be placed in `.env`; never commit `.env` or a Firebase service-account JSON. The previous repository history contains tracked credential files, so those credentials must be rotated before production deployment.
+
+---
+
+## Existing Airhub NFC system
 
 APC Airhub NFC tap-in/tap-out, registration, local MySQL, and Firebase Hosting system.
 

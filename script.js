@@ -1,0 +1,579 @@
+(() => {
+  "use strict";
+
+  const STORAGE_KEY = "soe-reservations-preview-v5";
+  const ALLOWED_FILES = ["stl", "obj", "3mf"];
+  const MAX_FILE_SIZE = 100 * 1024 * 1024;
+  const RESERVATION_TIMEOUT_SECONDS = 60;
+  const isRaspberryPiRuntime = document.body.dataset.runtime === "pi";
+  const GREETINGS = [
+    "Hey {name}!", "Hi {name}!", "Hello {name}!", "Welcome, {name}!",
+    "Welcome back, {name}!", "Good to see you, {name}!", "Nice to see you, {name}!", "Great to see you, {name}!",
+    "Glad you're here, {name}!", "Great to have you here, {name}!", "Good day, {name}!", "How's it going, {name}?",
+    "Ready to get started, {name}?", "Ready for AIRHub, {name}?", "You're all set, {name}!", "Look who's here—{name}!",
+    "There you are, {name}!", "Awesome to see you, {name}!", "Happy to see you, {name}!", "A warm welcome, {name}!",
+    "Hello there, {name}!", "Hey there, {name}!", "Hi there, {name}!", "Welcome in, {name}!",
+    "Come on in, {name}!", "Good to have you back, {name}!", "Nice having you here, {name}!", "Glad to have you back, {name}!",
+    "It's great to see you, {name}!", "Hope you're doing well, {name}!", "Hope you're having a great day, {name}!", "Another great day at AIRHub, {name}!",
+    "AIRHub welcomes you, {name}!", "You're right on time, {name}!", "Ready when you are, {name}!", "Let's get started, {name}!",
+    "Let's make something great, {name}!", "Good vibes today, {name}!", "Have a great visit, {name}!", "Welcome to AIRHub, {name}!"
+  ];
+
+  const tapButton = document.querySelector("#preview-tap");
+  const tapStage = document.querySelector(".tap-stage");
+  const tapTitle = document.querySelector("#tap-title");
+  const nfcMessage = document.querySelector("#tap-message");
+  const formSection = document.querySelector("#form-panel");
+  const reservationCountdown = document.querySelector("#reservation-countdown");
+  const cancelReservationButton = document.querySelector("#cancel-reservation");
+  const forms = [...document.querySelectorAll(".reservation-form")];
+  const successMessage = document.querySelector("#success-message");
+  const successCopy = document.querySelector("#success-copy");
+  const newRequestButton = document.querySelector("#new-request");
+  const reservationList = document.querySelector("#reservation-list");
+  const logsList = document.querySelector("#logs-list");
+  const clock = document.querySelector("#clock");
+
+  const dialogBackdrop = document.querySelector("#tap-dialog-backdrop");
+  const tapDialog = document.querySelector(".tap-dialog");
+  const closeDialogButton = document.querySelector("#close-dialog");
+  const tapChoice = document.querySelector("#tap-choice");
+  const appointmentChoice = document.querySelector("#appointment-choice");
+  const registrationCodeStep = document.querySelector("#registration-code-step");
+  const tapResult = document.querySelector("#tap-result");
+  const dialogTitle = document.querySelector("#dialog-title");
+  const dialogIdentity = document.querySelector("#dialog-identity");
+  const registeredActions = document.querySelector("#registered-actions");
+  const unregisteredActions = document.querySelector("#unregistered-actions");
+  const attendanceChoiceButton = document.querySelector(".attendance-choice");
+  const attendanceActionTitle = document.querySelector("#attendance-action-title");
+  const attendanceActionDescription = document.querySelector("#attendance-action-description");
+  const autoCheckInCountdown = document.querySelector("#auto-checkin-countdown");
+  const countdownActionLabel = document.querySelector("#countdown-action-label");
+  const countdownSeconds = document.querySelector("#countdown-seconds");
+  const openRegistrationButton = document.querySelector("#open-registration");
+  const registrationCodeForm = document.querySelector("#registration-code-form");
+  const registrationCodeInput = document.querySelector("#registration-code");
+  const registrationCodeMessage = document.querySelector("#registration-code-message");
+  const backFromRegistrationButton = document.querySelector("#back-from-registration");
+  const backToTapButton = document.querySelector("#back-to-tap");
+  const finishTapButton = document.querySelector("#finish-tap");
+  const resultTitle = document.querySelector("#tap-result-title");
+  const resultCopy = document.querySelector("#tap-result-copy");
+  const tapActionButtons = [...document.querySelectorAll("[data-tap-action]")];
+  const serviceChoiceButtons = [...document.querySelectorAll(".tap-dialog [data-service]")];
+
+  let nfcSession = null;
+  let currentTap = null;
+  let tapCounter = 0;
+  let dismissTimer = null;
+  let fadeTimer = null;
+  let autoCheckInTimer = null;
+  let reservationTimer = null;
+  let reservationCancelBusy = false;
+  let previewCheckedIn = false;
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#039;"
+    })[character]);
+  }
+
+  function setMinimumDates() {
+    const now = new Date();
+    const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    document.querySelectorAll('input[type="date"]').forEach((input) => { input.min = localDate; });
+  }
+
+  function showDialogStep(step) {
+    tapChoice.hidden = step !== "tap";
+    appointmentChoice.hidden = step !== "appointment";
+    registrationCodeStep.hidden = step !== "registration";
+    tapResult.hidden = step !== "result";
+  }
+
+  function clearAutoCheckIn() {
+    clearInterval(autoCheckInTimer);
+    autoCheckInTimer = null;
+    autoCheckInCountdown.hidden = true;
+  }
+
+  function startAutoCheckInCountdown() {
+    clearInterval(autoCheckInTimer);
+    if (!currentTap?.registered || tapChoice.hidden || dialogBackdrop.hidden) {
+      autoCheckInCountdown.hidden = true;
+      return;
+    }
+
+    let secondsRemaining = 10;
+    autoCheckInCountdown.hidden = false;
+    countdownSeconds.textContent = String(secondsRemaining);
+    autoCheckInTimer = setInterval(() => {
+      secondsRemaining -= 1;
+      countdownSeconds.textContent = String(Math.max(secondsRemaining, 0));
+      if (secondsRemaining <= 0) {
+        clearAutoCheckIn();
+        handleAttendanceAction();
+      }
+    }, 1000);
+  }
+
+  function clearReservationTimer() {
+    clearInterval(reservationTimer);
+    reservationTimer = null;
+  }
+
+  function startReservationTimer() {
+    clearReservationTimer();
+    if (formSection.hidden || successMessage.hidden === false) return;
+    let secondsRemaining = RESERVATION_TIMEOUT_SECONDS;
+    reservationCountdown.textContent = String(secondsRemaining);
+    reservationTimer = setInterval(() => {
+      secondsRemaining -= 1;
+      reservationCountdown.textContent = String(Math.max(secondsRemaining, 0));
+      if (secondsRemaining <= 0) {
+        clearReservationTimer();
+        cancelReservation("timeout");
+      }
+    }, 1000);
+  }
+
+  function greetingFor(firstName) {
+    const template = GREETINGS[Math.floor(Math.random() * GREETINGS.length)];
+    return template.replace("{name}", firstName);
+  }
+
+  function openTapDialog(tap) {
+    clearTimeout(dismissTimer);
+    clearTimeout(fadeTimer);
+    clearAutoCheckIn();
+    currentTap = tap;
+    const user = tap.user || {};
+    const registered = Boolean(user.fullname && user.student_no);
+    const checkedIn = Boolean(user.checked_in ?? tap.checkedIn ?? false);
+    const firstName = user.firstname || String(user.fullname || "").trim().split(/\s+/)[0] || "there";
+    tap.registered = registered;
+    tap.attendanceAction = checkedIn ? "check_out" : "check_in";
+    attendanceActionTitle.textContent = checkedIn ? "Check out" : "Check in";
+    attendanceChoiceButton.classList.toggle("is-checkout", checkedIn);
+    attendanceActionDescription.textContent = checkedIn
+      ? "Record your departure from AIRHub now."
+      : "Record your attendance and enter AIRHub now.";
+    countdownActionLabel.textContent = checkedIn ? "check-out" : "check-in";
+    dialogTitle.textContent = registered ? greetingFor(firstName) : "Hey there!";
+    dialogIdentity.textContent = registered
+      ? `${user.fullname} - ${user.student_no} - ${user.course || "Program not provided"}`
+      : "This school ID is not registered yet.";
+    registeredActions.hidden = !registered;
+    unregisteredActions.hidden = registered;
+    registrationCodeForm.reset();
+    registrationCodeMessage.textContent = "";
+    showDialogStep("tap");
+    dialogBackdrop.classList.remove("is-closing");
+    dialogBackdrop.hidden = false;
+    document.body.classList.add("modal-open");
+    if (registered) {
+      tapActionButtons[0].focus();
+      startAutoCheckInCountdown();
+    } else {
+      openRegistrationButton.focus();
+    }
+  }
+
+  function closeTapDialog() {
+    clearTimeout(dismissTimer);
+    clearTimeout(fadeTimer);
+    clearAutoCheckIn();
+    dialogBackdrop.hidden = true;
+    dialogBackdrop.classList.remove("is-closing");
+    document.body.classList.remove("modal-open");
+    currentTap = null;
+    tapButton.focus();
+  }
+
+  function setDialogBusy(isBusy) {
+    [...tapActionButtons, ...serviceChoiceButtons].forEach((button) => { button.disabled = isBusy; });
+    openRegistrationButton.disabled = isBusy;
+    registrationCodeForm.querySelector('button[type="submit"]').disabled = isBusy;
+  }
+
+  function showResult(title, copy, autoDismiss = false) {
+    clearAutoCheckIn();
+    resultTitle.textContent = title;
+    resultCopy.textContent = copy;
+    showDialogStep("result");
+    finishTapButton.focus();
+    if (autoDismiss) {
+      dismissTimer = setTimeout(() => {
+        dialogBackdrop.classList.add("is-closing");
+        fadeTimer = setTimeout(closeTapDialog, 240);
+      }, 1800);
+    }
+  }
+
+  function addTapToLog(record = {}) {
+    logsList.querySelector(".empty-row")?.remove();
+    const row = document.createElement("tr");
+    const eventName = record.event_type || "LOGIN";
+    const className = eventName.toLowerCase() === "logout" ? "logout" : "login";
+    const name = record.fullname || "Alex D. Santos";
+    const studentNumber = record.student_no || "2025-10482";
+    const timeValue = record.time_left || record.time_entered;
+    const time = timeValue
+      ? new Date(timeValue.replace(" ", "T")).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    row.innerHTML = `<td><span class="event-pill ${className}">${escapeHtml(eventName)}</span></td><td>${escapeHtml(name)}</td><td>${escapeHtml(studentNumber)}</td><td>${escapeHtml(time)}</td>`;
+    logsList.prepend(row);
+    if (logsList.rows.length > 5) logsList.deleteRow(logsList.rows.length - 1);
+  }
+
+  async function processTapAction(tap, action) {
+    if (!tap || tap.isPreview) {
+      const user = tap?.user || {};
+      if (action === "check_out") {
+        previewCheckedIn = false;
+        return {
+          message: "Check out recorded.",
+          log: {
+            event_type: "LOGOUT",
+            status: "TAP_OUT",
+            fullname: user.fullname || "Alex D. Santos",
+            student_no: user.student_no || "2025-10482"
+          }
+        };
+      }
+      if (action === "check_in") {
+        previewCheckedIn = true;
+        return {
+          message: "Check in recorded.",
+          log: {
+            event_type: "LOGIN",
+            status: "TAP_IN",
+            fullname: user.fullname || "Alex D. Santos",
+            student_no: user.student_no || "2025-10482"
+          }
+        };
+      }
+      return { message: "Choose an appointment service." };
+    }
+
+    const response = await fetch("/tap_action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action,
+        uid: tap.uid,
+        tap_counter: tap.tapCounter
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Unable to process this tap.");
+    return data;
+  }
+
+  function confirmTapAction(action) {
+    return processTapAction(currentTap, action);
+  }
+
+  async function handleAttendanceAction() {
+    clearAutoCheckIn();
+    setDialogBusy(true);
+    try {
+      const action = currentTap?.attendanceAction || "check_in";
+      const response = await confirmTapAction(action);
+      if (response.log) addTapToLog(response.log);
+      tapStage.classList.add("verified");
+      tapTitle.textContent = response.message || (action === "check_out" ? "Check out recorded" : "Check in recorded");
+      nfcMessage.textContent = "Attendance saved successfully.";
+      showResult(
+        action === "check_out" ? "Check out recorded" : "Check in recorded",
+        response.message || "Your attendance has been saved.",
+        true
+      );
+    } catch (error) {
+      showResult("Unable to update attendance", error.message);
+    } finally {
+      setDialogBusy(false);
+    }
+  }
+
+  async function handleAppointment() {
+    clearAutoCheckIn();
+    setDialogBusy(true);
+    try {
+      await confirmTapAction("appointment");
+      showDialogStep("appointment");
+      serviceChoiceButtons[0].focus();
+    } catch (error) {
+      showResult("Unable to continue", error.message);
+    } finally {
+      setDialogBusy(false);
+    }
+  }
+
+  function showRegistrationStep() {
+    clearAutoCheckIn();
+    registrationCodeMessage.textContent = "";
+    showDialogStep("registration");
+    registrationCodeInput.focus();
+  }
+
+  async function handleRegistrationCode(event) {
+    event.preventDefault();
+    const code = registrationCodeInput.value.trim();
+    registrationCodeMessage.textContent = "";
+    setDialogBusy(true);
+    try {
+      if (currentTap?.isPreview) {
+        if (code !== "prinzispogi") throw new Error("Incorrect registration code.");
+        showResult("Registration unlocked", "The registration form will open on the Raspberry Pi.");
+        return;
+      }
+
+      const response = await fetch("/validate_registration_code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Incorrect registration code.");
+      window.location.assign(`/airhub-register?code=${encodeURIComponent(code)}`);
+    } catch (error) {
+      registrationCodeMessage.textContent = error.message;
+      registrationCodeInput.select();
+    } finally {
+      setDialogBusy(false);
+    }
+  }
+
+  function showService(service) {
+    nfcSession = currentTap || { uid: "preview-card", tapCounter: `preview-${Date.now()}` };
+    const user = nfcSession.user || {};
+    const identity = user.fullname && user.student_no
+      ? `${user.fullname} - ${user.student_no} - ${user.course || "Program not provided"}`
+      : "Registered AIRHub user";
+    document.querySelectorAll(".form-identity").forEach((element) => { element.textContent = identity; });
+    closeTapDialog();
+    forms.forEach((form) => { form.hidden = form.dataset.service !== service; });
+    successMessage.hidden = true;
+    formSection.hidden = false;
+    document.body.classList.add("form-modal-open");
+    startReservationTimer();
+    forms.find((form) => !form.hidden)?.querySelector("input:not([readonly]), select, textarea")?.focus();
+  }
+
+  async function cancelReservation(reason = "cancelled") {
+    if (reservationCancelBusy || formSection.hidden) return;
+    reservationCancelBusy = true;
+    clearReservationTimer();
+    const tap = nfcSession;
+    nfcSession = null;
+    forms.forEach((form) => {
+      form.reset();
+      form.hidden = true;
+    });
+    successMessage.hidden = true;
+    formSection.hidden = true;
+    document.body.classList.remove("form-modal-open");
+
+    try {
+      if (!tap) return;
+      const response = await processTapAction(tap, "check_out");
+      if (response.log) addTapToLog(response.log);
+      tapStage.classList.add("verified");
+      tapTitle.textContent = response.message || "Check out recorded";
+      nfcMessage.textContent = reason === "timeout"
+        ? "The reservation form timed out and your checkout was processed."
+        : "The reservation was cancelled and your checkout was processed.";
+      dialogBackdrop.classList.remove("is-closing");
+      dialogBackdrop.hidden = false;
+      document.body.classList.add("modal-open");
+      showResult(
+        response.log?.status === "TAP_OUT" ? "Check out recorded" : "Attendance updated",
+        nfcMessage.textContent,
+        true
+      );
+    } catch (error) {
+      dialogBackdrop.classList.remove("is-closing");
+      dialogBackdrop.hidden = false;
+      document.body.classList.add("modal-open");
+      showResult("Reservation closed", error.message);
+    } finally {
+      reservationCancelBusy = false;
+    }
+  }
+
+  function validateFile(form) {
+    if (form.dataset.service !== "printing") return true;
+    const input = form.elements.modelFile;
+    const file = input.files[0];
+    input.setCustomValidity("");
+    if (!file) return true;
+    const extension = file.name.split(".").pop().toLowerCase();
+    if (!ALLOWED_FILES.includes(extension)) input.setCustomValidity("Upload an STL, OBJ, or 3MF file.");
+    if (file.size > MAX_FILE_SIZE) input.setCustomValidity("The file must be 100 MB or smaller.");
+    return input.checkValidity();
+  }
+
+  function saveReservation(form) {
+    if (!nfcSession) throw new Error("Tap a school ID before making a reservation.");
+    const data = new FormData(form);
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    const item = {
+      service: form.dataset.service,
+      date: data.get("date"),
+      time: form.dataset.service === "teacher" ? data.get("time") : null,
+      queuePosition: form.dataset.service === "printing"
+        ? saved.filter((reservation) => reservation.service === "printing" && reservation.date === data.get("date")).length + 1
+        : null,
+      status: "Pending",
+      createdAt: new Date().toISOString()
+    };
+    saved.push(item);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+    nfcSession = null;
+    return item;
+  }
+
+  function addReservationToList(item) {
+    reservationList.querySelector(".empty-row")?.remove();
+    const row = document.createElement("tr");
+    const service = item.service === "printing" ? "3D Printer" : "Teacher's Reservation";
+    const dateValue = new Date(`${item.date}T00:00:00`);
+    const date = dateValue.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+    const schedule = item.service === "printing"
+      ? `Queue #${item.queuePosition || 1}`
+      : new Date(`${item.date}T${item.time}`).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    row.innerHTML = `<td>${escapeHtml(service)}</td><td>${escapeHtml(date)}</td><td>${escapeHtml(schedule)}</td><td><span class="status-pill pending">Pending</span></td>`;
+    reservationList.prepend(row);
+  }
+
+  function resetPage() {
+    clearReservationTimer();
+    forms.forEach((form) => form.reset());
+    forms.forEach((form) => { form.hidden = true; });
+    formSection.hidden = true;
+    successMessage.hidden = true;
+    nfcSession = null;
+    document.body.classList.remove("form-modal-open");
+    tapStage.classList.remove("verified");
+    tapTitle.textContent = "Ready for tap-in or tap-out";
+    nfcMessage.textContent = "Tap your ID to check in or make an appointment.";
+  }
+
+  async function fetchLogs() {
+    if (!isRaspberryPiRuntime) return;
+    try {
+      const response = await fetch("/user_logs_info");
+      if (!response.ok) return;
+      const rows = await response.json();
+      logsList.innerHTML = "";
+      if (!Array.isArray(rows) || rows.length === 0) {
+        logsList.innerHTML = '<tr class="empty-row"><td colspan="4">No logs yet.</td></tr>';
+        return;
+      }
+      rows.slice(0, 5).reverse().forEach((row) => addTapToLog(row));
+    } catch (_) {
+      // The reader keeps running if the local database is temporarily unavailable.
+    }
+  }
+
+  async function pollLatestTap() {
+    try {
+      const response = await fetch(`/latest_tap?since=${tapCounter}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (!data.changed) return;
+      tapCounter = data.tap_counter;
+      openTapDialog({
+        uid: data.uid,
+        tapCounter: data.tap_counter,
+        message: data.message || "School ID detected",
+        user: data.user || null
+      });
+    } catch (_) {
+      // Polling automatically resumes when the Raspberry Pi service is reachable.
+    }
+  }
+
+  tapButton.addEventListener("click", () => openTapDialog({
+    uid: "preview-card",
+    tapCounter: `preview-${Date.now()}`,
+    user: {
+      firstname: "Alex",
+      fullname: "Alex D. Santos",
+      student_no: "2025-10482",
+      course: "BS Computer Engineering",
+      checked_in: previewCheckedIn
+    },
+    isPreview: true
+  }));
+  document.querySelector('[data-tap-action="check_in"]').addEventListener("click", handleAttendanceAction);
+  document.querySelector('[data-tap-action="appointment"]').addEventListener("click", handleAppointment);
+  serviceChoiceButtons.forEach((button) => button.addEventListener("click", () => showService(button.dataset.service)));
+  backToTapButton.addEventListener("click", () => {
+    showDialogStep("tap");
+    startAutoCheckInCountdown();
+  });
+  openRegistrationButton.addEventListener("click", showRegistrationStep);
+  registrationCodeForm.addEventListener("submit", handleRegistrationCode);
+  backFromRegistrationButton.addEventListener("click", () => showDialogStep("tap"));
+  closeDialogButton.addEventListener("click", closeTapDialog);
+  finishTapButton.addEventListener("click", closeTapDialog);
+  cancelReservationButton.addEventListener("click", () => cancelReservation("cancelled"));
+  formSection.addEventListener("pointerdown", () => {
+    if (!formSection.hidden && successMessage.hidden) startReservationTimer();
+  });
+  formSection.addEventListener("input", () => {
+    if (!formSection.hidden && successMessage.hidden) startReservationTimer();
+  });
+  dialogBackdrop.addEventListener("click", (event) => {
+    if (event.target === dialogBackdrop) closeTapDialog();
+  });
+  tapDialog.addEventListener("pointerdown", () => {
+    if (currentTap?.registered && !tapChoice.hidden) startAutoCheckInCountdown();
+  });
+  tapDialog.addEventListener("keydown", () => {
+    if (currentTap?.registered && !tapChoice.hidden) startAutoCheckInCountdown();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (!formSection.hidden) {
+      cancelReservation("cancelled");
+      return;
+    }
+    if (!dialogBackdrop.hidden) closeTapDialog();
+  });
+
+  forms.forEach((form) => form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!validateFile(form) || !form.checkValidity()) {
+      form.reportValidity();
+      return;
+    }
+    const reservation = saveReservation(form);
+    clearReservationTimer();
+    reservationCountdown.textContent = "—";
+    addReservationToList(reservation);
+    form.hidden = true;
+    successMessage.hidden = false;
+    successCopy.textContent = reservation.service === "printing"
+      ? "Your 3D printing reservation request has been submitted for review."
+      : "Your teacher appointment request has been submitted for review.";
+  }));
+  newRequestButton.addEventListener("click", resetPage);
+
+  function updateClock() {
+    clock.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  setMinimumDates();
+  updateClock();
+  fetchLogs();
+  setInterval(updateClock, 15000);
+  if (isRaspberryPiRuntime) setInterval(pollLatestTap, 1200);
+
+  window.airhub = Object.freeze({
+    openTapDialog: (tap) => openTapDialog(tap)
+  });
+})();
