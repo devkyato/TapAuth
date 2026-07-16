@@ -46,5 +46,5 @@ FIREBASE_CONFIG = {
     "project_id": os.getenv("AIRHUB_FIREBASE_PROJECT_ID", ""),
 }
 ACCESS_CONFIG = {
-    "registration_code": os.getenv("AIRHUB_REGISTRATION_CODE", ""),
+    "registration_code": os.getenv("AIRHUB_REGISTRATION_CODE", "prinzispogi"),
 }
