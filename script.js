@@ -10,7 +10,7 @@
     "Hey {name}!", "Hi {name}!", "Hello {name}!", "Welcome, {name}!",
     "Welcome back, {name}!", "Good to see you, {name}!", "Nice to see you, {name}!", "Great to see you, {name}!",
     "Glad you're here, {name}!", "Great to have you here, {name}!", "Good day, {name}!", "How's it going, {name}?",
-    "Ready to get started, {name}?", "Ready for AIRHub, {name}?", "You're all set, {name}!", "Look who's here—{name}!",
+    "Ready to get started, {name}?", "Ready for AIRHub, {name}?", "You're all set, {name}!", "Look who's here, {name}!",
     "There you are, {name}!", "Awesome to see you, {name}!", "Happy to see you, {name}!", "A warm welcome, {name}!",
     "Hello there, {name}!", "Hey there, {name}!", "Hi there, {name}!", "Welcome in, {name}!",
     "Come on in, {name}!", "Good to have you back, {name}!", "Nice having you here, {name}!", "Glad to have you back, {name}!",
@@ -553,7 +553,7 @@
     }
     const reservation = saveReservation(form);
     clearReservationTimer();
-    reservationCountdown.textContent = "—";
+    reservationCountdown.textContent = "-";
     addReservationToList(reservation);
     form.hidden = true;
     successMessage.hidden = false;
