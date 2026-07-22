@@ -6,12 +6,12 @@
   <meta name="description" content="School of Engineering AIRHub access logs and reservations.">
   <title>School of Engineering - AIRHub</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="styles.css?v=20260717-2">
+  <link rel="stylesheet" href="styles.css?v=20260722-10">
 </head>
 <body data-runtime="preview">
   <main class="airhub-shell">
     <header class="airhub-header">
-      <img class="soe-logo" src="static/soe_airhub_logo.png?v=20260717-2" alt="Asia Pacific College School of Engineering logo" width="92" height="92">
+      <img class="soe-logo" src="static/soe_airhub_logo.png?v=20260722-10" alt="Asia Pacific College School of Engineering logo" width="92" height="92">
       <div class="brand-block">
         <h1><span>School of Engineering</span><strong> - AIRHub</strong></h1>
         <time id="clock" aria-label="Current time">--:--</time>
@@ -174,8 +174,14 @@
         </div>
         <p class="form-identity">Alex D. Santos - 2025-10482 - BS Computer Engineering</p>
 
-        <fieldset>
-          <legend>Print details</legend>
+        <div class="step-bars" aria-label="Reservation progress">
+          <span class="active" data-step-bar="1">Schedule</span>
+          <span data-step-bar="2">Model</span>
+          <span data-step-bar="3">Confirm</span>
+        </div>
+
+        <fieldset class="form-step" data-step="1">
+          <legend>Schedule details</legend>
           <div class="form-grid">
             <label>
               <span>Reservation Date</span>
@@ -194,6 +200,12 @@
               </select>
             </label>
             <label class="wide"><span>Project or Print Name</span><input name="projectName" maxlength="100" required></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="form-step" data-step="2" hidden>
+          <legend>Model file</legend>
+          <div class="form-grid">
             <label class="wide file-input">
               <span>Upload 3D Model File</span>
               <input name="modelFile" type="file" accept=".stl,.obj,.3mf" required>
@@ -203,12 +215,26 @@
           </div>
         </fieldset>
 
-        <label class="confirmation">
-          <input name="confirmation" type="checkbox" required>
-          <span>I confirm that the information provided is correct and understand that submitting this form does not automatically approve the reservation.</span>
-        </label>
-        <p class="notice">Reservation requests are subject to schedule availability, file review, machine condition, and approval by the assigned laboratory personnel.</p>
-        <button class="primary-action" type="submit">Submit Reservation Request</button>
+        <fieldset class="form-step" data-step="3" hidden>
+          <legend>Review and confirm</legend>
+          <div class="review-card" aria-live="polite">
+            <p><span>Date</span><strong data-review="date">-</strong></p>
+            <p><span>Duration</span><strong data-review="duration">-</strong></p>
+            <p><span>Project</span><strong data-review="projectName">-</strong></p>
+            <p><span>File</span><strong data-review="modelFile">-</strong></p>
+          </div>
+          <label class="confirmation">
+            <input name="confirmation" type="checkbox" required>
+            <span>I confirm that the information provided is correct and understand that submitting this form does not automatically approve the reservation.</span>
+          </label>
+          <p class="notice">Reservation requests are subject to schedule availability, file review, machine condition, and approval by the assigned laboratory personnel.</p>
+        </fieldset>
+
+        <div class="step-actions">
+          <button class="secondary-action" type="button" data-step-prev hidden>Back</button>
+          <button class="primary-action" type="button" data-step-next>Next</button>
+          <button class="primary-action" type="submit" data-step-submit hidden>Submit Reservation Request</button>
+        </div>
       </form>
 
       <div id="success-message" class="success-message" role="status" hidden>
@@ -219,6 +245,6 @@
       </div>
     </section>
   </main>
-  <script src="script.js?v=20260717-2" defer></script>
+  <script src="script.js?v=20260722-10" defer></script>
 </body>
 </html>
