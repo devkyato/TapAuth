@@ -3,12 +3,23 @@
 ![TapAuth repository cover](docs/assets/github-cover.png)
 
 [![Quality checks](https://github.com/devkyato/TapAuth/actions/workflows/ci.yml/badge.svg)](https://github.com/devkyato/TapAuth/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/devkyato/TapAuth)](https://github.com/devkyato/TapAuth/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-ready-C51A4A.svg)](scripts/setup_raspberry_pi.sh)
 
 TapAuth is an open-source, Raspberry Pi-ready NFC attendance and reservation kiosk. It pairs an ACR122U reader with a lightweight Flask app, keeps working from local MySQL when the internet is unavailable, and mirrors students and attendance logs to Firebase Realtime Database.
 
 Built for the Asia Pacific College School of Engineering AIRHub by [@devkyato](https://github.com/devkyato).
+
+## Try the interface locally
+
+The repository includes a dependency-free preview that uses browser storage and simulated NFC taps:
+
+```bash
+python -m http.server 4173
+```
+
+Open `http://127.0.0.1:4173`. The Flask, MySQL, NFC, and Firebase services are used only by the Raspberry Pi runtime.
 
 ## Highlights
 
@@ -64,7 +75,7 @@ Start from [.env.example](.env.example). At minimum, set a strong MySQL password
 AIRHUB_DB_USER=airhub_app
 AIRHUB_DB_PASSWORD=replace-with-a-strong-password
 AIRHUB_DB_NAME=airhub_db
-AIRHUB_REGISTRATION_CODE=replace-with-a-private-admin-code
+TAPAUTH_ADMIN_CODE=replace-with-a-private-admin-code
 ```
 
 To enable Firebase copying:
@@ -94,7 +105,7 @@ firebase use your-project-id
 firebase deploy --only database,hosting
 ```
 
-Student and reservation data is private under `tapauth/users` and `tapauth/reservations`. Only the public-safe `tapauth/logs` feed is readable from the hosted page. Administrators can inspect the complete database in the Firebase Console or use the Pi-local `/admin` dashboard.
+Student and reservation data is private under `tapauth/users` and `tapauth/reservations`. Only event and timing fields in the public-safe `tapauth/logs` feed are readable from the hosted page. Administrators can inspect the complete database in the Firebase Console or use the Pi-local `/admin` dashboard.
 
 To copy all existing MySQL students and logs into Firebase:
 
@@ -137,6 +148,7 @@ templates/admin.html      student management dashboard
 hosting/                  Firebase-hosted public activity view
 scripts/                  Pi setup, updates, diagnostics, backup, migration
 schema.sql                idempotent local database schema
+tests/                    privacy and Firebase boundary checks
 ```
 
 ## Quality checks
@@ -144,13 +156,15 @@ schema.sql                idempotent local database schema
 ```bash
 python -m compileall -q .
 node --check script.js
+node --check hosting/app.js
 python -m json.tool firebase.json
 python -m json.tool database.rules.json
+python -m unittest discover -s tests -v
 ```
 
 ## Contributing
 
-Focused issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md), get help through [SUPPORT.md](SUPPORT.md), and report vulnerabilities according to [SECURITY.md](SECURITY.md).
+Focused issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md), get help through [SUPPORT.md](SUPPORT.md), and report vulnerabilities privately according to [SECURITY.md](SECURITY.md).
 
 ## License
 

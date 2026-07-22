@@ -33,12 +33,12 @@ function showGreeting(row) {
     tapMessage.classList.remove("tap-flash");
     if (row.status === "GUEST_PENDING") {
         tapMessage.textContent = "Guest tap recorded.";
-        tapSubtext.textContent = "Register this card to show a name.";
+        tapSubtext.textContent = "Registration can be completed at the local kiosk.";
     } else if (row.event_type === "LOGOUT") {
-        tapMessage.textContent = `Log out: ${row.fullname || "Guest"}`;
+        tapMessage.textContent = "Check-out recorded";
         tapSubtext.textContent = `Stayed ${row.duration_label || "00:00:00"}.`;
     } else {
-        tapMessage.textContent = `Login: ${row.fullname || "Guest"}`;
+        tapMessage.textContent = "Check-in recorded";
         tapSubtext.textContent = "Time entered saved.";
     }
     void tapMessage.offsetWidth;
@@ -57,7 +57,7 @@ function renderLogs(snapshot) {
 
     if (rows.length === 0) {
         if (lastRowsKey !== "empty") {
-            logsBody.innerHTML = '<tr><td colspan="7">No logs yet.</td></tr>';
+            logsBody.innerHTML = '<tr><td colspan="5">No activity yet.</td></tr>';
             lastRowsKey = "empty";
         }
         return;
@@ -77,9 +77,7 @@ function renderLogs(snapshot) {
     logsBody.innerHTML = visibleRows.map((row) => `
         <tr>
             <td><span class="status-pill">${escapeHtml(row.event_type || "")}</span></td>
-            <td>${escapeHtml(row.lastname || "")}</td>
-            <td>${escapeHtml(row.firstname || "")}</td>
-            <td>${escapeHtml(row.student_no || "")}</td>
+            <td>${escapeHtml(row.date_logged || "")}</td>
             <td>${escapeHtml(row.time_entered || "")}</td>
             <td>${escapeHtml(row.time_left || "")}</td>
             <td>${escapeHtml(row.duration_label || "")}</td>
@@ -96,5 +94,5 @@ onValue(logsQuery, (snapshot) => {
     renderLogs(snapshot);
 }, (error) => {
     syncState.textContent = "Offline";
-    logsBody.innerHTML = `<tr><td colspan="7">${escapeHtml(error.message || "Unable to load Realtime Database logs.")}</td></tr>`;
+    logsBody.innerHTML = `<tr><td colspan="5">${escapeHtml(error.message || "Unable to load Realtime Database logs.")}</td></tr>`;
 });

@@ -26,7 +26,7 @@ set +a
 DB_NAME="${AIRHUB_DB_NAME:-airhub_db}"
 DB_USER="${AIRHUB_DB_USER:-}"
 DB_PASSWORD="${AIRHUB_DB_PASSWORD:-}"
-ADMIN_CODE="${AIRHUB_REGISTRATION_CODE:-}"
+ADMIN_CODE="${TAPAUTH_ADMIN_CODE:-${AIRHUB_REGISTRATION_CODE:-}}"
 
 if [[ -z "$DB_USER" || -z "$DB_PASSWORD" || "$DB_USER" == "your_mysql_user" || "$DB_PASSWORD" == "your_mysql_password" ]]; then
   cat <<EOF
@@ -39,7 +39,7 @@ EOF
 fi
 
 if [[ -z "$ADMIN_CODE" || "$ADMIN_CODE" == "replace-with-a-private-admin-code" ]]; then
-  echo "Set a private AIRHUB_REGISTRATION_CODE in $ENV_FILE before setup."
+  echo "Set a private TAPAUTH_ADMIN_CODE in $ENV_FILE before setup."
   exit 1
 fi
 
@@ -161,10 +161,10 @@ Open:
   http://$(hostname -I | awk '{print $1}'):5000/
 
 Hidden registration:
-  http://$(hostname -I | awk '{print $1}'):5000/airhub-register?code=$AIRHUB_REGISTRATION_CODE
+  http://$(hostname -I | awk '{print $1}'):5000/airhub-register?code=$ADMIN_CODE
 
 iPhone registration on the same Wi-Fi:
-  http://$(hostname -I | awk '{print $1}'):5000/airhub-register?code=$AIRHUB_REGISTRATION_CODE
+  http://$(hostname -I | awk '{print $1}'):5000/airhub-register?code=$ADMIN_CODE
 
 Chromium kiosk autostart:
   $RUN_HOME/.config/autostart/airhub-kiosk.desktop

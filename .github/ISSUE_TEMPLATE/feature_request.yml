@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest a focused improvement to TapAuth.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: User need
+      description: What problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest useful change.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - NFC and Raspberry Pi
+        - Attendance
+        - Reservations
+        - Firebase sync
+        - Administration
+        - Documentation
+    validations:
+      required: true

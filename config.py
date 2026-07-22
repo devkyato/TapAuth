@@ -47,5 +47,5 @@ FIREBASE_CONFIG = {
     "root": os.getenv("AIRHUB_FIREBASE_ROOT", "tapauth").strip("/") or "tapauth",
 }
 ACCESS_CONFIG = {
-    "registration_code": os.getenv("AIRHUB_REGISTRATION_CODE", ""),
+    "admin_code": os.getenv("TAPAUTH_ADMIN_CODE", os.getenv("AIRHUB_REGISTRATION_CODE", "")),
 }

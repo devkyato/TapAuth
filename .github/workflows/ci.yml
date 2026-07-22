@@ -11,18 +11,25 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - name: Check Python syntax
         run: python -m compileall -q .
       - name: Check JavaScript syntax
-        run: node --check script.js
+        run: |
+          node --check script.js
+          node --check hosting/app.js
+          node --check hosting/firebase-config.js
+      - name: Check shell scripts
+        run: find scripts -name '*.sh' -print0 | xargs -0 -n1 bash -n
       - name: Validate Firebase JSON
         run: |
           python -m json.tool firebase.json > /dev/null
           python -m json.tool database.rules.json > /dev/null
+      - name: Run privacy boundary tests
+        run: python -m unittest discover -s tests -v

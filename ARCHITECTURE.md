@@ -1,48 +1,45 @@
-# Production architecture
+# TapAuth architecture
 
-## User flows
+TapAuth is a local-first NFC attendance and reservation kiosk designed for a Raspberry Pi. Local MySQL is the source of truth; Firebase Realtime Database is an optional, retryable copy for remote visibility.
 
-### Teacher appointment
+## Runtime flow
 
-1. A student taps a registered school ID at the Raspberry Pi kiosk.
-2. The Pi sends a signed tap event to the Vercel API.
-3. The API creates a short-lived, single-use NFC session and returns only public-safe profile fields to the kiosk.
-4. The student selects a teacher, date, time, and appointment purpose.
-5. Firebase stores the request as `pending` in a transaction that prevents a duplicate time slot.
-6. The teacher receives approve/reject links by email.
-7. The student receives the decision by email.
+```text
+ACR122U NFC reader
+        |
+        v
+Raspberry Pi / Flask ----> MySQL
+        |                    |
+        |                    +---- durable Firebase retry queue
+        v
+Firebase Realtime Database ----> public-safe activity page
+```
 
-### 3D printing
+The reader runs continuously and reconnects after hardware interruptions. A card tap creates a short-lived session. A registered card may check in/out or request an appointment; an unknown card may register only while its matching physical tap session remains valid.
 
-1. The same NFC verification unlocks the print request.
-2. The model is uploaded through a controlled storage URL; the server verifies the extension, size, and stored object metadata.
-3. Firebase stores private request data separately from the public-safe queue projection.
-4. Laboratory personnel approve or reject the file and schedule.
-5. The server assigns `now`, `next`, and `upcoming` positions. Clients cannot write queue positions.
-6. The student receives submission and decision emails.
+## Data ownership
 
-## Raspberry Pi tap behavior
+- `users`: private student profile and card association in MySQL; mirrored to private Firebase data without the NFC UID.
+- `logs`: complete local attendance record; mirrored to the public path with event and timing fields only.
+- `reservations`: requester and request details in MySQL; mirrored to private Firebase data without NFC UIDs or local file paths.
+- `uploads/models`: Pi-local 3D files; ignored by Git and never copied to Realtime Database.
 
-Airhub attendance and reservation identity are separate event types:
+Firebase paths live below the configurable `tapauth` root. Database rules allow public reads only for `tapauth/logs`; browsers cannot write any path.
 
-- Attendance tap 1: `CHECK_IN`
-- Attendance tap 2: `EXIT`
-- Attendance tap 3: `RETURN`
-- Attendance tap 4: `EXIT`
-- Reservation tap: creates an expiring reservation session and must not alter attendance state
+## Availability model
 
-The current attendance implementation alternates odd/even same-day taps. Before production it should explicitly store event types, lengthen the reader cooldown, handle sessions that cross midnight, and keep reservation taps from changing occupancy.
+Attendance and reservations complete against local MySQL even when Firebase is unavailable. Failed cloud writes enter `firebase_sync_queue`, and the background worker retries them without blocking the kiosk.
 
-## Data boundaries
+## Security boundary
 
-- Public: project label, scheduled time, and queue status only.
-- Personnel: requester identity, description, notes, model metadata, and review state.
-- Restricted: raw NFC identifiers, device secrets, Firebase credentials, and email provider keys.
+- Student registration must match the latest NFC UID and tap counter and expires after 120 seconds.
+- The management dashboard requires `TAPAUTH_ADMIN_CODE` and is intended for a trusted local network.
+- Public API responses remove NFC UIDs and model storage paths.
+- `.env`, database exports, uploaded models, Firebase secrets, and service-account files are excluded from Git.
+- The Firebase browser key identifies the public web application; it is not an administrator credential.
 
-Raw NFC identifiers must never be returned by a public browser endpoint. Device requests require HTTPS, a device ID, timestamp, nonce, and HMAC signature. NFC sessions expire quickly and are consumed atomically with reservation creation.
+For an internet-facing deployment, place the Flask service behind HTTPS, network authentication, and a reverse proxy rather than exposing port 5000 directly.
 
-## Environment ownership
+## Extension points
 
-- Raspberry Pi `.env`: reader device credentials, local MySQL, and outbound API configuration.
-- Vercel environment: Firebase Admin credentials, email provider key, Turnstile secret, signing keys, and personnel email configuration.
-- Browser: public Firebase configuration and Turnstile site key only.
+Database access, Firebase synchronization, NFC reading, and presentation are separated into modules. A future hosted API, email provider, or object-storage adapter can be added without changing the kiosk interaction model.

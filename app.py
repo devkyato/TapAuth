@@ -102,7 +102,7 @@ nfc_reader.start()
 
 
 def registration_authorized():
-    code = ACCESS_CONFIG.get("registration_code", "")
+    code = ACCESS_CONFIG.get("admin_code", "")
     if not code:
         return False
     supplied = (
@@ -275,7 +275,7 @@ def get_nfc_code():
 def validate_registration_code():
     data = request.get_json(silent=True) or {}
     supplied = str(data.get("code") or "")
-    expected = str(ACCESS_CONFIG.get("registration_code") or "")
+    expected = str(ACCESS_CONFIG.get("admin_code") or "")
     if not expected or not hmac.compare_digest(supplied, expected):
         return jsonify({"error": "Incorrect registration code."}), 403
     return jsonify({"success": True})

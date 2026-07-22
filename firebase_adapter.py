@@ -87,14 +87,9 @@ def update_rtdb(updates):
 
 
 def public_log_payload(log_record):
-    fullname = log_record.get("fullname") or "Guest"
     status = log_record.get("status") or "GUEST_PENDING"
     return {
         "local_id": log_record.get("id"),
-        "fullname": fullname,
-        "lastname": log_record.get("lastname"),
-        "firstname": log_record.get("firstname"),
-        "student_no": log_record.get("student_no"),
         "status": status,
         "event_type": log_record.get("event_type"),
         "tap_type": status if status in ("TAP_IN", "TAP_OUT") else None,

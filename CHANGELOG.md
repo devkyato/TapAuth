@@ -10,3 +10,6 @@ All notable TapAuth changes are documented here.
 - Added secure local 3D model storage and reservation queue positions.
 - Added the student and reservation management dashboard.
 - Added Raspberry Pi startup, reader recovery, update tooling, CI, and open-source documentation.
+- Removed student identity from the publicly readable Firebase activity feed.
+- Added automated privacy boundary tests and complete GitHub community templates.
+- Removed obsolete machine-specific recovery notes and the deprecated Firestore-named sync alias.
