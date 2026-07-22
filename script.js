@@ -5,6 +5,7 @@
   const ALLOWED_FILES = ["stl", "obj", "3mf"];
   const MAX_FILE_SIZE = 100 * 1024 * 1024;
   const RESERVATION_TIMEOUT_SECONDS = 60;
+  const TAP_BANNER_RESET_MS = 3200;
   const isRaspberryPiRuntime = document.body.dataset.runtime === "pi";
   const GREETINGS = [
     "Hey {name}!", "Hi {name}!", "Hello {name}!", "Welcome, {name}!",
@@ -62,16 +63,26 @@
   const resultCopy = document.querySelector("#tap-result-copy");
   const tapActionButtons = [...document.querySelectorAll("[data-tap-action]")];
   const serviceChoiceButtons = [...document.querySelectorAll(".tap-dialog [data-service]")];
+  const printingForm = document.querySelector("#printing-form");
+  const printingSteps = [...document.querySelectorAll("#printing-form .form-step")];
+  const printingStepBars = [...document.querySelectorAll("#printing-form [data-step-bar]")];
+  const printingPrevButton = document.querySelector("#printing-form [data-step-prev]");
+  const printingNextButton = document.querySelector("#printing-form [data-step-next]");
+  const printingSubmitButton = document.querySelector("#printing-form [data-step-submit]");
 
   let nfcSession = null;
   let currentTap = null;
   let tapCounter = 0;
   let dismissTimer = null;
   let fadeTimer = null;
+  let tapBannerTimer = null;
   let autoCheckInTimer = null;
   let reservationTimer = null;
   let reservationCancelBusy = false;
+  let tapActionBusy = false;
+  let appointmentBusy = false;
   let previewCheckedIn = false;
+  let printingStep = 1;
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, (character) => ({
@@ -90,6 +101,26 @@
     appointmentChoice.hidden = step !== "appointment";
     registrationCodeStep.hidden = step !== "registration";
     tapResult.hidden = step !== "result";
+  }
+
+  function resetTapBanner() {
+    clearTimeout(tapBannerTimer);
+    tapBannerTimer = null;
+    tapStage.classList.remove("verified", "warning");
+    tapTitle.textContent = "Ready for tap-in or tap-out";
+    nfcMessage.textContent = "Tap your ID to check in or make an appointment.";
+  }
+
+  function setTapBanner(title, message, options = {}) {
+    clearTimeout(tapBannerTimer);
+    tapStage.classList.toggle("verified", options.kind === "success");
+    tapStage.classList.toggle("warning", options.kind === "warning");
+    tapTitle.textContent = title;
+    nfcMessage.textContent = message;
+
+    if (options.autoReset !== false) {
+      tapBannerTimer = setTimeout(resetTapBanner, options.timeout || TAP_BANNER_RESET_MS);
+    }
   }
 
   function clearAutoCheckIn() {
@@ -138,6 +169,53 @@
     }, 1000);
   }
 
+  function fieldsForStep(step) {
+    const stepElement = printingSteps.find((element) => Number(element.dataset.step) === step);
+    return stepElement ? [...stepElement.querySelectorAll("input, select, textarea")] : [];
+  }
+
+  function updatePrintingReview() {
+    if (!printingForm) return;
+    const date = printingForm.elements.date?.value;
+    const durationSelect = printingForm.elements.duration;
+    const projectName = printingForm.elements.projectName?.value.trim();
+    const file = printingForm.elements.modelFile?.files[0];
+    const dateLabel = date ? new Date(`${date}T00:00:00`).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) : "-";
+    printingForm.querySelector('[data-review="date"]').textContent = dateLabel;
+    printingForm.querySelector('[data-review="duration"]').textContent = durationSelect?.selectedOptions[0]?.textContent || "-";
+    printingForm.querySelector('[data-review="projectName"]').textContent = projectName || "-";
+    printingForm.querySelector('[data-review="modelFile"]').textContent = file?.name || "-";
+  }
+
+  function showPrintingStep(step) {
+    printingStep = Math.min(Math.max(step, 1), printingSteps.length || 1);
+    printingSteps.forEach((element) => { element.hidden = Number(element.dataset.step) !== printingStep; });
+    printingStepBars.forEach((element) => {
+      const index = Number(element.dataset.stepBar);
+      element.classList.toggle("active", index === printingStep);
+      element.classList.toggle("done", index < printingStep);
+    });
+    if (printingPrevButton) printingPrevButton.hidden = printingStep === 1;
+    if (printingNextButton) printingNextButton.hidden = printingStep === printingSteps.length;
+    if (printingSubmitButton) printingSubmitButton.hidden = printingStep !== printingSteps.length;
+    if (printingStep === printingSteps.length) updatePrintingReview();
+    fieldsForStep(printingStep).find((field) => field.type !== "hidden")?.focus({ preventScroll: true });
+  }
+
+  function validatePrintingStep(step) {
+    if (step === 2 && !validateFile(printingForm)) {
+      printingForm.elements.modelFile.reportValidity();
+      return false;
+    }
+    const invalidField = fieldsForStep(step).find((field) => !field.checkValidity());
+    if (invalidField) {
+      invalidField.reportValidity();
+      invalidField.focus({ preventScroll: true });
+      return false;
+    }
+    return true;
+  }
+
   function greetingFor(firstName) {
     const template = GREETINGS[Math.floor(Math.random() * GREETINGS.length)];
     return template.replace("{name}", firstName);
@@ -146,7 +224,13 @@
   function openTapDialog(tap) {
     clearTimeout(dismissTimer);
     clearTimeout(fadeTimer);
+    clearTimeout(tapBannerTimer);
     clearAutoCheckIn();
+    tapActionBusy = false;
+    appointmentBusy = false;
+    setDialogBusy(false);
+    if (!formSection.hidden) return;
+    tapStage.classList.remove("verified", "warning");
     currentTap = tap;
     const user = tap.user || {};
     const registered = Boolean(user.fullname && user.student_no);
@@ -188,13 +272,15 @@
     dialogBackdrop.classList.remove("is-closing");
     document.body.classList.remove("modal-open");
     currentTap = null;
-    tapButton.focus();
+    setDialogBusy(false);
+    tapButton.focus({ preventScroll: true });
   }
 
   function setDialogBusy(isBusy) {
     [...tapActionButtons, ...serviceChoiceButtons].forEach((button) => { button.disabled = isBusy; });
     openRegistrationButton.disabled = isBusy;
-    registrationCodeForm.querySelector('button[type="submit"]').disabled = isBusy;
+    const registrationSubmit = registrationCodeForm.querySelector('button[type="submit"]');
+    if (registrationSubmit) registrationSubmit.disabled = isBusy;
   }
 
   function showResult(title, copy, autoDismiss = false) {
@@ -276,28 +362,36 @@
   }
 
   async function handleAttendanceAction() {
+    if (tapActionBusy || !currentTap) return;
+    tapActionBusy = true;
     clearAutoCheckIn();
     setDialogBusy(true);
     try {
       const action = currentTap?.attendanceAction || "check_in";
       const response = await confirmTapAction(action);
       if (response.log) addTapToLog(response.log);
-      tapStage.classList.add("verified");
-      tapTitle.textContent = response.message || (action === "check_out" ? "Check out recorded" : "Check in recorded");
-      nfcMessage.textContent = "Attendance saved successfully.";
+      setTapBanner(
+        response.message || (action === "check_out" ? "Check out recorded" : "Check in recorded"),
+        "Attendance saved successfully.",
+        { kind: "success" }
+      );
       showResult(
         action === "check_out" ? "Check out recorded" : "Check in recorded",
         response.message || "Your attendance has been saved.",
         true
       );
     } catch (error) {
+      setTapBanner("Unable to update attendance", error.message, { kind: "warning", timeout: 5000 });
       showResult("Unable to update attendance", error.message);
     } finally {
       setDialogBusy(false);
+      tapActionBusy = false;
     }
   }
 
   async function handleAppointment() {
+    if (appointmentBusy || !currentTap) return;
+    appointmentBusy = true;
     clearAutoCheckIn();
     setDialogBusy(true);
     try {
@@ -305,9 +399,11 @@
       showDialogStep("appointment");
       serviceChoiceButtons[0].focus();
     } catch (error) {
+      setTapBanner("Unable to continue", error.message, { kind: "warning", timeout: 5000 });
       showResult("Unable to continue", error.message);
     } finally {
       setDialogBusy(false);
+      appointmentBusy = false;
     }
   }
 
@@ -347,6 +443,9 @@
   }
 
   function showService(service) {
+    clearAutoCheckIn();
+    clearTimeout(dismissTimer);
+    clearTimeout(fadeTimer);
     nfcSession = currentTap || { uid: "preview-card", tapCounter: `preview-${Date.now()}` };
     const user = nfcSession.user || {};
     const identity = user.fullname && user.student_no
@@ -354,7 +453,9 @@
       : "Registered AIRHub user";
     document.querySelectorAll(".form-identity").forEach((element) => { element.textContent = identity; });
     closeTapDialog();
+    forms.forEach((form) => form.reset());
     forms.forEach((form) => { form.hidden = form.dataset.service !== service; });
+    if (service === "printing") showPrintingStep(1);
     successMessage.hidden = true;
     formSection.hidden = false;
     document.body.classList.add("form-modal-open");
@@ -380,20 +481,20 @@
       if (!tap) return;
       const response = await processTapAction(tap, "check_out");
       if (response.log) addTapToLog(response.log);
-      tapStage.classList.add("verified");
-      tapTitle.textContent = response.message || "Check out recorded";
-      nfcMessage.textContent = reason === "timeout"
+      const message = reason === "timeout"
         ? "The reservation form timed out and your checkout was processed."
         : "The reservation was cancelled and your checkout was processed.";
+      setTapBanner(response.message || "Check out recorded", message, { kind: "success" });
       dialogBackdrop.classList.remove("is-closing");
       dialogBackdrop.hidden = false;
       document.body.classList.add("modal-open");
       showResult(
         response.log?.status === "TAP_OUT" ? "Check out recorded" : "Attendance updated",
-        nfcMessage.textContent,
+        message,
         true
       );
     } catch (error) {
+      setTapBanner("Reservation closed", error.message, { kind: "warning", timeout: 5000 });
       dialogBackdrop.classList.remove("is-closing");
       dialogBackdrop.hidden = false;
       document.body.classList.add("modal-open");
@@ -449,16 +550,15 @@
   }
 
   function resetPage() {
+    resetTapBanner();
     clearReservationTimer();
     forms.forEach((form) => form.reset());
+    showPrintingStep(1);
     forms.forEach((form) => { form.hidden = true; });
     formSection.hidden = true;
     successMessage.hidden = true;
     nfcSession = null;
     document.body.classList.remove("form-modal-open");
-    tapStage.classList.remove("verified");
-    tapTitle.textContent = "Ready for tap-in or tap-out";
-    nfcMessage.textContent = "Tap your ID to check in or make an appointment.";
   }
 
   async function fetchLogs() {
@@ -521,6 +621,11 @@
   closeDialogButton.addEventListener("click", closeTapDialog);
   finishTapButton.addEventListener("click", closeTapDialog);
   cancelReservationButton.addEventListener("click", () => cancelReservation("cancelled"));
+  printingPrevButton?.addEventListener("click", () => showPrintingStep(printingStep - 1));
+  printingNextButton?.addEventListener("click", () => {
+    if (!validatePrintingStep(printingStep)) return;
+    showPrintingStep(printingStep + 1);
+  });
   formSection.addEventListener("pointerdown", () => {
     if (!formSection.hidden && successMessage.hidden) startReservationTimer();
   });
