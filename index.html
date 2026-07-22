@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="School of Engineering AIRHub access logs and reservations.">
-  <title>School of Engineering - AIRHub</title>
+  <meta name="description" content="TapAuth NFC attendance and reservations for the School of Engineering.">
+  <title>TapAuth - School of Engineering</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="styles.css?v=20260722-10">
+  <link rel="stylesheet" href="styles.css?v=20260722-11">
 </head>
 <body data-runtime="preview">
   <main class="airhub-shell">
     <header class="airhub-header">
       <img class="soe-logo" src="static/soe_airhub_logo.png?v=20260722-10" alt="Asia Pacific College School of Engineering logo" width="92" height="92">
       <div class="brand-block">
-        <h1><span>School of Engineering</span><strong> - AIRHub</strong></h1>
+        <h1><span>TapAuth</span><strong> - School of Engineering</strong></h1>
         <time id="clock" aria-label="Current time">--:--</time>
       </div>
     </header>
@@ -50,7 +50,10 @@
             Automatic <span id="countdown-action-label">check-in</span> in <strong id="countdown-seconds">10</strong> seconds
           </p>
           <div id="unregistered-actions" class="unregistered-block" hidden>
-            <button id="open-registration" class="choice-button primary-choice" type="button">Register</button>
+            <button id="open-registration" class="choice-button primary-choice" type="button">
+              <strong>Register this card</strong>
+              <span>Add your student details and continue immediately.</span>
+            </button>
           </div>
         </div>
 
@@ -72,12 +75,16 @@
 
         <div id="registration-code-step" class="dialog-step" hidden>
           <h2>Register this ID</h2>
-          <p class="dialog-question">Enter the registration code to continue.</p>
-          <form id="registration-code-form" class="registration-code-form">
-            <label for="registration-code">Registration code</label>
-            <input id="registration-code" name="registrationCode" type="password" autocomplete="off" required>
+          <p class="dialog-question">Complete your student profile. This card will be linked automatically.</p>
+          <form id="registration-code-form" class="registration-code-form student-registration-form">
+            <div class="registration-name-grid">
+              <label><span>First name</span><input name="firstname" autocomplete="given-name" maxlength="100" required></label>
+              <label><span>Last name</span><input name="lastname" autocomplete="family-name" maxlength="100" required></label>
+            </div>
+            <label><span>Student number</span><input name="student_no" autocomplete="off" maxlength="64" required></label>
+            <label><span>Program / Course</span><input name="course" autocomplete="organization-title" maxlength="100" placeholder="BS Computer Engineering" required></label>
             <p id="registration-code-message" class="code-message" role="alert"></p>
-            <button class="primary-action" type="submit">Continue</button>
+            <button class="primary-action" type="submit">Register and continue</button>
           </form>
           <button id="back-from-registration" class="text-button" type="button">Back</button>
         </div>
@@ -134,6 +141,7 @@
           <p>Reservation session closes in <strong id="reservation-countdown">60</strong> seconds</p>
           <button id="cancel-reservation" class="secondary-action" type="button">Cancel</button>
         </div>
+        <p id="reservation-form-message" class="form-error" role="alert"></p>
       <form id="teacher-form" class="reservation-form compact-form" data-service="teacher" hidden novalidate>
         <div class="panel-head">
           <p>Appointment request</p>
@@ -245,6 +253,6 @@
       </div>
     </section>
   </main>
-  <script src="script.js?v=20260722-10" defer></script>
+  <script src="script.js?v=20260722-11" defer></script>
 </body>
 </html>

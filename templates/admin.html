@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TapAuth Student Management</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="admin-page">
+  <main class="admin-shell">
+    <header class="admin-header">
+      <div class="brand">
+        <img src="/static/soe_airhub_logo.png" alt="School of Engineering">
+        <span><strong>TapAuth</strong><small>System management</small></span>
+      </div>
+      <nav><a href="/">Kiosk</a>{% if firebase_project_id %}<a href="https://console.firebase.google.com/project/{{ firebase_project_id }}/database" target="_blank" rel="noopener">Firebase data</a>{% endif %}</nav>
+    </header>
+
+    <section class="admin-toolbar">
+      <div><p class="eyebrow">Registered cards</p><h1>Students</h1></div>
+      <label class="admin-search"><span class="sr-only">Search students</span><input id="studentSearch" type="search" placeholder="Search name, number, or course"></label>
+    </section>
+
+    <section class="admin-table-panel">
+      <div class="table-wrap">
+        <table class="logs-table">
+          <thead><tr><th>Name</th><th>Student number</th><th>Program</th><th>Registered</th><th></th></tr></thead>
+          <tbody id="studentsBody"><tr><td colspan="5">Loading students...</td></tr></tbody>
+        </table>
+      </div>
+      <p id="adminMessage" class="message" role="status"></p>
+    </section>
+
+    <section class="admin-toolbar admin-section-heading">
+      <div><p class="eyebrow">Appointment queue</p><h1>Reservations</h1></div>
+    </section>
+    <section class="admin-table-panel">
+      <div class="table-wrap">
+        <table class="logs-table">
+          <thead><tr><th>Requester</th><th>Service</th><th>Date / schedule</th><th>Details</th><th>Status</th></tr></thead>
+          <tbody id="reservationsBody"><tr><td colspan="5">Loading reservations...</td></tr></tbody>
+        </table>
+      </div>
+      <p id="reservationMessage" class="message" role="status"></p>
+    </section>
+  </main>
+  <script>
+    const accessCode = {{ access_code|tojson }};
+    const body = document.getElementById('studentsBody');
+    const search = document.getElementById('studentSearch');
+    const message = document.getElementById('adminMessage');
+    const reservationsBody = document.getElementById('reservationsBody');
+    const reservationMessage = document.getElementById('reservationMessage');
+    let students = [];
+
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[character]));
+
+    function render() {
+      const term = search.value.trim().toLowerCase();
+      const visible = students.filter((student) => [student.fullname, student.student_no, student.course].some((value) => String(value || '').toLowerCase().includes(term)));
+      body.innerHTML = visible.length ? visible.map((student) => `<tr><td><strong>${escapeHtml(student.fullname)}</strong></td><td>${escapeHtml(student.student_no)}</td><td>${escapeHtml(student.course)}</td><td>${escapeHtml(student.created_at || '')}</td><td><button class="danger-link" data-delete="${student.id}" type="button">Remove</button></td></tr>`).join('') : '<tr><td colspan="5">No matching students.</td></tr>';
+    }
+
+    async function loadStudents() {
+      const response = await fetch(`/admin/users?code=${encodeURIComponent(accessCode)}`, {cache: 'no-store'});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to load students.');
+      students = data;
+      render();
+    }
+
+    async function loadReservations() {
+      const response = await fetch(`/admin/reservations?code=${encodeURIComponent(accessCode)}`, {cache: 'no-store'});
+      const rows = await response.json();
+      if (!response.ok) throw new Error(rows.error || 'Unable to load reservations.');
+      reservationsBody.innerHTML = rows.length ? rows.map((item) => {
+        const service = item.service === 'printing' ? '3D Printing' : 'Teacher';
+        const schedule = item.service === 'printing' ? `Queue #${item.queue_position || '-'}` : (item.schedule_time || '');
+        const detail = item.service === 'printing' ? (item.project_name || '') : `${item.teacher_name || ''} — ${item.purpose || ''}`;
+        const statuses = ['PENDING','APPROVED','DECLINED','COMPLETED','CANCELLED'];
+        return `<tr><td><strong>${escapeHtml(item.fullname)}</strong><br><small>${escapeHtml(item.student_no)}</small></td><td>${service}</td><td>${escapeHtml(item.reservation_date)}<br><small>${escapeHtml(schedule)}</small></td><td>${escapeHtml(detail)}</td><td><select class="status-select" data-reservation="${item.id}">${statuses.map((status) => `<option value="${status}" ${status === item.status ? 'selected' : ''}>${status.charAt(0) + status.slice(1).toLowerCase()}</option>`).join('')}</select></td></tr>`;
+      }).join('') : '<tr><td colspan="5">No reservations yet.</td></tr>';
+    }
+
+    body.addEventListener('click', async (event) => {
+      const button = event.target.closest('[data-delete]');
+      if (!button) return;
+      const student = students.find((item) => String(item.id) === button.dataset.delete);
+      if (!student || !confirm(`Remove ${student.fullname} from TapAuth?`)) return;
+      button.disabled = true;
+      const response = await fetch(`/admin/users/${student.id}?code=${encodeURIComponent(accessCode)}`, {method: 'DELETE'});
+      const data = await response.json();
+      if (!response.ok) { message.textContent = data.error || 'Unable to remove student.'; button.disabled = false; return; }
+      students = students.filter((item) => item.id !== student.id);
+      message.textContent = data.message;
+      render();
+    });
+    search.addEventListener('input', render);
+    reservationsBody.addEventListener('change', async (event) => {
+      const select = event.target.closest('[data-reservation]');
+      if (!select) return;
+      select.disabled = true;
+      const response = await fetch(`/admin/reservations/${select.dataset.reservation}?code=${encodeURIComponent(accessCode)}`, {
+        method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({status: select.value})
+      });
+      const data = await response.json();
+      reservationMessage.textContent = data.message || data.error || '';
+      select.disabled = false;
+    });
+    loadStudents().catch((error) => { body.innerHTML = '<tr><td colspan="5">Unable to load students.</td></tr>'; message.textContent = error.message; });
+    loadReservations().catch((error) => { reservationsBody.innerHTML = '<tr><td colspan="5">Unable to load reservations.</td></tr>'; reservationMessage.textContent = error.message; });
+  </script>
+</body>
+</html>

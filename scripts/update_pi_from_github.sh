@@ -4,6 +4,7 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$PROJECT_DIR/.env"
 SERVICE_NAME="airhub.service"
+GIT_BRANCH="${TAPAUTH_GIT_BRANCH:-main}"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing $ENV_FILE. Copy .env.example to .env and fill it first."
@@ -25,8 +26,9 @@ fi
 
 cd "$PROJECT_DIR"
 
-git fetch origin main
-git pull --ff-only origin main
+git fetch origin "$GIT_BRANCH"
+git checkout "$GIT_BRANCH"
+git pull --ff-only origin "$GIT_BRANCH"
 
 sudo timedatectl set-ntp true || true
 sudo systemctl restart systemd-timesyncd || true

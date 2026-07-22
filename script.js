@@ -32,6 +32,7 @@
   const successCopy = document.querySelector("#success-copy");
   const newRequestButton = document.querySelector("#new-request");
   const reservationList = document.querySelector("#reservation-list");
+  const reservationFormMessage = document.querySelector("#reservation-form-message");
   const logsList = document.querySelector("#logs-list");
   const clock = document.querySelector("#clock");
 
@@ -54,7 +55,6 @@
   const countdownSeconds = document.querySelector("#countdown-seconds");
   const openRegistrationButton = document.querySelector("#open-registration");
   const registrationCodeForm = document.querySelector("#registration-code-form");
-  const registrationCodeInput = document.querySelector("#registration-code");
   const registrationCodeMessage = document.querySelector("#registration-code-message");
   const backFromRegistrationButton = document.querySelector("#back-from-registration");
   const backToTapButton = document.querySelector("#back-to-tap");
@@ -411,32 +411,46 @@
     clearAutoCheckIn();
     registrationCodeMessage.textContent = "";
     showDialogStep("registration");
-    registrationCodeInput.focus();
+    registrationCodeForm.elements.firstname.focus();
   }
 
   async function handleRegistrationCode(event) {
     event.preventDefault();
-    const code = registrationCodeInput.value.trim();
     registrationCodeMessage.textContent = "";
+    if (!registrationCodeForm.reportValidity()) return;
     setDialogBusy(true);
     try {
+      const fields = new FormData(registrationCodeForm);
+      const profile = Object.fromEntries(fields.entries());
       if (currentTap?.isPreview) {
-        if (code !== "prinzispogi") throw new Error("Incorrect registration code.");
-        showResult("Registration unlocked", "The registration form will open on the Raspberry Pi.");
+        currentTap.user = {
+          firstname: profile.firstname,
+          fullname: `${profile.firstname} ${profile.lastname}`,
+          student_no: profile.student_no,
+          course: profile.course,
+          checked_in: false
+        };
+        currentTap.registered = true;
+        openTapDialog(currentTap);
         return;
       }
 
-      const response = await fetch("/validate_registration_code", {
+      const response = await fetch("/register_from_tap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code })
+        body: JSON.stringify({
+          ...profile,
+          uid: currentTap?.uid,
+          tap_counter: currentTap?.tapCounter
+        })
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "Incorrect registration code.");
-      window.location.assign(`/airhub-register?code=${encodeURIComponent(code)}`);
+      if (!response.ok) throw new Error(data.error || "Unable to register this card.");
+      currentTap.user = data.user;
+      currentTap.registered = true;
+      openTapDialog(currentTap);
     } catch (error) {
       registrationCodeMessage.textContent = error.message;
-      registrationCodeInput.select();
     } finally {
       setDialogBusy(false);
     }
@@ -457,6 +471,7 @@
     forms.forEach((form) => { form.hidden = form.dataset.service !== service; });
     if (service === "printing") showPrintingStep(1);
     successMessage.hidden = true;
+    reservationFormMessage.textContent = "";
     formSection.hidden = false;
     document.body.classList.add("form-modal-open");
     startReservationTimer();
@@ -516,9 +531,19 @@
     return input.checkValidity();
   }
 
-  function saveReservation(form) {
+  async function saveReservation(form) {
     if (!nfcSession) throw new Error("Tap a school ID before making a reservation.");
     const data = new FormData(form);
+    if (isRaspberryPiRuntime && !nfcSession.isPreview) {
+      data.append("service", form.dataset.service);
+      data.append("uid", nfcSession.uid);
+      data.append("tap_counter", nfcSession.tapCounter);
+      const response = await fetch("/reservations", { method: "POST", body: data });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Unable to save the reservation.");
+      nfcSession = null;
+      return result.reservation;
+    }
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
     const item = {
       service: form.dataset.service,
@@ -545,7 +570,8 @@
     const schedule = item.service === "printing"
       ? `Queue #${item.queuePosition || 1}`
       : new Date(`${item.date}T${item.time}`).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-    row.innerHTML = `<td>${escapeHtml(service)}</td><td>${escapeHtml(date)}</td><td>${escapeHtml(schedule)}</td><td><span class="status-pill pending">Pending</span></td>`;
+    const status = String(item.status || "PENDING").toLowerCase();
+    row.innerHTML = `<td>${escapeHtml(service)}</td><td>${escapeHtml(date)}</td><td>${escapeHtml(schedule)}</td><td><span class="status-pill ${escapeHtml(status)}">${escapeHtml(status.charAt(0).toUpperCase() + status.slice(1))}</span></td>`;
     reservationList.prepend(row);
   }
 
@@ -575,6 +601,23 @@
       rows.slice(0, 5).reverse().forEach((row) => addTapToLog(row));
     } catch (_) {
       // The reader keeps running if the local database is temporarily unavailable.
+    }
+  }
+
+  async function fetchReservations() {
+    if (!isRaspberryPiRuntime) return;
+    try {
+      const response = await fetch("/reservations/current", { cache: "no-store" });
+      if (!response.ok) return;
+      const rows = await response.json();
+      reservationList.innerHTML = "";
+      if (!Array.isArray(rows) || rows.length === 0) {
+        reservationList.innerHTML = '<tr class="empty-row"><td colspan="4">No current reservations.</td></tr>';
+        return;
+      }
+      rows.slice(0, 8).reverse().forEach(addReservationToList);
+    } catch (_) {
+      // Local reservation submissions continue even if this refresh fails.
     }
   }
 
@@ -650,21 +693,31 @@
     if (!dialogBackdrop.hidden) closeTapDialog();
   });
 
-  forms.forEach((form) => form.addEventListener("submit", (event) => {
+  forms.forEach((form) => form.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!validateFile(form) || !form.checkValidity()) {
       form.reportValidity();
       return;
     }
-    const reservation = saveReservation(form);
-    clearReservationTimer();
-    reservationCountdown.textContent = "-";
-    addReservationToList(reservation);
-    form.hidden = true;
-    successMessage.hidden = false;
-    successCopy.textContent = reservation.service === "printing"
-      ? "Your 3D printing reservation request has been submitted for review."
-      : "Your teacher appointment request has been submitted for review.";
+    const submitButton = form.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    reservationFormMessage.textContent = "";
+    try {
+      const reservation = await saveReservation(form);
+      clearReservationTimer();
+      reservationCountdown.textContent = "-";
+      addReservationToList(reservation);
+      form.hidden = true;
+      successMessage.hidden = false;
+      successCopy.textContent = reservation.service === "printing"
+        ? "Your 3D printing reservation request has been submitted for review."
+        : "Your teacher appointment request has been submitted for review.";
+    } catch (error) {
+      reservationFormMessage.textContent = error.message;
+      startReservationTimer();
+    } finally {
+      submitButton.disabled = false;
+    }
   }));
   newRequestButton.addEventListener("click", resetPage);
 
@@ -675,6 +728,7 @@
   setMinimumDates();
   updateClock();
   fetchLogs();
+  fetchReservations();
   setInterval(updateClock, 15000);
   if (isRaspberryPiRuntime) setInterval(pollLatestTap, 1200);
 

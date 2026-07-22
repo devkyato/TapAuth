@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="devkyato/loginsys_airhub"
-TARGET_DIR="${1:-$HOME/loginsys_airhub}"
+REPO="devkyato/TapAuth"
+TARGET_DIR="${1:-$HOME/TapAuth}"
 
 if ! command -v gh >/dev/null 2>&1; then
   sudo apt-get update

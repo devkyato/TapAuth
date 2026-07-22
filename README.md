@@ -1,307 +1,157 @@
-# School of Engineering Reservation and Airhub NFC System
+# TapAuth — NFC access and reservations
 
-This workspace now consolidates the existing Raspberry Pi NFC project with a new responsive reservation preview.
+![TapAuth repository cover](docs/assets/github-cover.png)
 
-## Current preview
+[![Quality checks](https://github.com/devkyato/TapAuth/actions/workflows/ci.yml/badge.svg)](https://github.com/devkyato/TapAuth/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-ready-C51A4A.svg)](scripts/setup_raspberry_pi.sh)
 
-The root web files provide the new two-service experience:
+TapAuth is an open-source, Raspberry Pi-ready NFC attendance and reservation kiosk. It pairs an ACR122U reader with a lightweight Flask app, keeps working from local MySQL when the internet is unavailable, and mirrors students and attendance logs to Firebase Realtime Database.
 
-- `index.html`: teacher appointment and 3D-printing reservation page
-- `styles.css`: responsive white-and-orange interface
-- `script.js`: NFC preview gate, validation, local preview storage, and queue rendering
+Built for the Asia Pacific College School of Engineering AIRHub by [@devkyato](https://github.com/devkyato).
 
-Start the preview from the project root:
+## Highlights
 
-```bash
-python -m http.server 4173 --bind 127.0.0.1
+- NFC tap-in and tap-out with automatic state detection
+- Fast registration directly after an unknown card is tapped—no shared student code
+- 3D printing and teacher appointment request flows with Pi-local model storage
+- Local-first MySQL storage with a durable Firebase retry queue
+- Private student directory and code-protected management dashboard
+- Firebase Realtime Database live copy and public-safe attendance feed
+- Automatic Raspberry Pi startup, kiosk mode, reader reconnection, and GitHub updates
+- Plain HTML, CSS, JavaScript, and Python; no frontend build step
+
+## How it works
+
+```text
+ACR122U card tap
+      │
+      ▼
+Raspberry Pi + Flask ───► Local MySQL (source of truth)
+      │                         │
+      │                         └── offline-safe retry queue
+      ▼
+Firebase Realtime Database ───► hosted/public activity view
 ```
 
-Then open `http://127.0.0.1:4173/`.
+Unknown cards receive a short-lived registration session tied to that exact physical tap. Registered cards can check in/out or open the appointment flow. Student NFC identifiers never appear in public Firebase records or the admin API.
 
-The **Preview ID Tap** button is intentionally a local demonstration control. Production submissions will require a short-lived, single-use NFC session created by the Raspberry Pi and verified by the Vercel API.
+## Quick start on Raspberry Pi
 
-## Consolidated production components
+Requirements: Raspberry Pi OS, an ACR122U USB NFC reader, internet for first-time setup, and a Firebase Realtime Database if cloud sync is wanted.
 
-- Raspberry Pi, Flask, ACR122U, and local MySQL remain the physical tap source of truth.
-- Firebase remains the shared data and synchronization layer.
-- Vercel will host the reservation interface and protected API routes.
-- Cloudflare Turnstile will protect public request endpoints.
-- Transactional email will send student confirmations and personnel approval links.
+```bash
+git clone https://github.com/devkyato/TapAuth.git
+cd TapAuth
+cp .env.example .env
+nano .env
+bash scripts/setup_raspberry_pi.sh
+```
 
-Local secrets must be placed in `.env`; never commit `.env` or a Firebase service-account JSON. The previous repository history contains tracked credential files, so those credentials must be rotated before production deployment.
+The setup script installs MariaDB, Python dependencies, libnfc, udev permissions, the `airhub.service` systemd unit, boot-time Git updates, and Chromium kiosk startup.
 
----
+Open:
 
-## Existing Airhub NFC system
-
-APC Airhub NFC tap-in/tap-out, registration, local MySQL, and Firebase Hosting system.
-
-The Raspberry Pi is the source of truth for physical card taps. It records every tap into local MySQL/MariaDB for phpMyAdmin, then optionally syncs public-safe data to Firebase Realtime Database. Firebase Hosting reads Realtime Database and shows the live public tap-in/tap-out screen.
-
-## Main Files
-
-- `app.py`: Flask routes and NFC scanner wiring
-- `database.py`: local MySQL/phpMyAdmin data access
-- `firebase_adapter.py`: Raspberry Pi to Realtime Database sync
-- `schema.sql`: local MySQL schema and public log view
-- `templates/login.html`: local Raspberry Pi tap-in/tap-out kiosk
-- `templates/index.html`: hidden registration page at `/airhub-register`
-- `hosting/`: Firebase Hosting public app backed by Realtime Database
-- `scripts/setup_raspberry_pi.sh`: Raspberry Pi setup/service installer
-- `scripts/migrate_old_sql.sh`: safe old SQL import into the active MySQL DB
-- `scripts/sync_realtime_db.py`: full MySQL to Realtime Database backfill
-- `scripts/export_database.sh`: SQL and CSV-compatible local exports
+- Kiosk: `http://127.0.0.1:5000/`
+- Student management: `http://127.0.0.1:5000/admin`
+- Health and reader status: `http://127.0.0.1:5000/system_status`
 
 ## Environment
 
-Copy `.env.example` to `.env` on each machine and fill in local values there. `.env` is ignored by Git and should not be uploaded.
+Start from [.env.example](.env.example). At minimum, set a strong MySQL password and admin code:
 
-Realtime Database sync uses only the database URL and legacy database secret. It does not use `GOOGLE_APPLICATION_CREDENTIALS` or a Firebase Admin SDK service-account JSON.
+```env
+AIRHUB_DB_USER=airhub_app
+AIRHUB_DB_PASSWORD=replace-with-a-strong-password
+AIRHUB_DB_NAME=airhub_db
+AIRHUB_REGISTRATION_CODE=replace-with-a-private-admin-code
+```
+
+To enable Firebase copying:
 
 ```env
 AIRHUB_FIREBASE_ENABLED=true
 AIRHUB_FIREBASE_MODE=realtime_db
-AIRHUB_FIREBASE_DATABASE_URL=https://airhub-login-default-rtdb.asia-southeast1.firebasedatabase.app/
-AIRHUB_FIREBASE_DATABASE_SECRET=<legacy-database-secret>
+AIRHUB_FIREBASE_DATABASE_URL=https://your-project-default-rtdb.region.firebasedatabase.app
+AIRHUB_FIREBASE_DATABASE_SECRET=your-server-side-database-secret
+AIRHUB_FIREBASE_PROJECT_ID=your-project-id
+AIRHUB_FIREBASE_ROOT=tapauth
 ```
 
-Configure the secret locally on the Pi:
+The Firebase browser `apiKey` is a public project identifier, not an admin credential. Keep the Realtime Database secret, service-account files, `.env`, and MySQL password out of Git.
+
+## Firebase setup
+
+1. Create a Firebase project and Realtime Database.
+2. Copy your web app configuration into `hosting/firebase-config.js`.
+3. Configure the server-side values in the Raspberry Pi `.env`.
+4. Deploy the included rules and hosting files:
 
 ```bash
-cd /home/mako-airhub/loginsys_airhub
-bash scripts/configure_realtime_db_secret.sh \
-  https://airhub-login-default-rtdb.asia-southeast1.firebasedatabase.app/ \
-  <legacy-database-secret>
+npm install -g firebase-tools
+firebase login --no-localhost
+firebase use your-project-id
+firebase deploy --only database,hosting
+```
+
+Student and reservation data is private under `tapauth/users` and `tapauth/reservations`. Only the public-safe `tapauth/logs` feed is readable from the hosted page. Administrators can inspect the complete database in the Firebase Console or use the Pi-local `/admin` dashboard.
+
+To copy all existing MySQL students and logs into Firebase:
+
+```bash
 source .venv/bin/activate
 python scripts/sync_realtime_db.py
 ```
 
-
-## GitHub CLI Raspberry Pi Flow
-
-Fresh Pi clone/sync with GitHub CLI:
+## Updating a Raspberry Pi
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y gh
-gh auth login
-bash <(curl -fsSL https://raw.githubusercontent.com/devkyato/loginsys_airhub/main/scripts/bootstrap_from_github.sh)
-```
-
-If the repo is already on the Pi:
-
-```bash
-cd /home/mako-airhub/loginsys_airhub
+cd /home/mako-airhub/TapAuth
+git pull
 bash scripts/update_pi_from_github.sh
-```
-
-That update script pulls `main`, installs Python requirements, creates/updates the MySQL database, applies `schema.sql`, restarts the auto-run service, and uploads MySQL data to Realtime Database when `AIRHUB_FIREBASE_ENABLED=true`.
-
-## MySQL Database Setup
-
-Create `.env` on the Raspberry Pi only:
-
-```bash
-cd /home/mako-airhub/loginsys_airhub
-cp .env.example .env
-nano .env
-```
-
-Set the new local database values there:
-
-```env
-AIRHUB_DB_NAME=airhub_db
-AIRHUB_DB_USER=userigga
-AIRHUB_DB_PASSWORD=<your_mysql_password>
-```
-
-Do not commit `.env`. The setup scripts create the database/user if they do not exist.
-
-The app is intentionally compatible with the old core database shape:
-
-```text
-users: id, student_no, lastname, firstname, middlename, fullname, course, project_type, room, nfc_code, created_at
-user_logs: id, nfc_code, date_logged
-```
-
-Tap-in/tap-out status is calculated from the order of taps per card per day, so no extra `tap_type` column is required.
-
-The kiosk frontend shows only attendance fields:
-
-- Login rows: last name, first name, student number, time entered
-- Logout rows: last name, first name, student number, time entered, time left, duration stayed
-
-When a card logs out, the scan message also shows how long the person stayed.
-
-## Auto-Run On Power-On
-
-`bash scripts/setup_raspberry_pi.sh` installs `airhub.service` as a systemd service:
-
-```bash
-sudo systemctl enable airhub.service
 sudo systemctl restart airhub.service
 sudo systemctl status airhub.service
 ```
 
-That means the tap-in/tap-out app starts automatically whenever the Raspberry Pi powers on. Setup also creates a desktop autostart entry that opens Chromium in kiosk mode at `http://127.0.0.1:5000/`.
+For a non-default deployment branch, set `TAPAUTH_GIT_BRANCH` in `.env`.
 
-## Raspberry Pi Setup
-
-Run from this folder on the Raspberry Pi:
-
-```bash
-bash scripts/setup_raspberry_pi.sh
-```
-
-After pulling updates, apply the current schema/view safely:
-
-```bash
-MYSQL_PWD="$AIRHUB_DB_PASSWORD" mysql -u "$AIRHUB_DB_USER" "$AIRHUB_DB_NAME" < schema.sql
-sudo systemctl restart airhub.service
-```
-
-Hidden registration uses the Pi-local code:
-
-```text
-http://<pi-ip>:5000/airhub-register?code=<AIRHUB_REGISTRATION_CODE>
-```
-
-Short registration link for laptops/iPhones on the same Wi-Fi:
-
-```text
-http://<pi-ip>:5000/registration?code=<AIRHUB_REGISTRATION_CODE>
-```
-
-## Old Data
-
-Import the old SQL without wiping current data:
-
-```bash
-bash scripts/migrate_old_sql.sh /path/to/old_airhub.sql
-```
-
-If you copied the old raw MariaDB folder, recover the real dump, merge it into the new database, and sync Realtime Database in one command:
-
-```bash
-cd /home/mako-airhub/loginsys_airhub
-bash scripts/recover_import_old_data.sh /home/mako-airhub/old_sql_export/mysql_raw_from_E_var_var_lib_mysql
-```
-
-Then copy all current MySQL users/logs to Realtime Database:
-
-```bash
-source .venv/bin/activate
-python scripts/sync_realtime_db.py
-```
-
-If Firebase sync fails, run the diagnostic:
-
-```bash
-source .venv/bin/activate
-python scripts/diagnose_firebase.py
-```
-
-The diagnostic should show `database_secret_configured: True` and `realtime_database_target: True`.
-
-Old registrations stay active because NFC matching still uses the local MySQL `users.nfc_code` field. Import old data before registering new cards so previously registered cards are recognized immediately by the kiosk.
-
-## Firebase Hosting
-
-The hosting app lives in `hosting/` and reads from Realtime Database path `airhub/logs`. It does not show NFC codes.
-
-Deploy hosting and Realtime Database rules. On Raspberry Pi, install Firebase CLI with npm, not pip:
-
-```bash
-sudo apt-get install -y nodejs npm
-sudo npm install -g firebase-tools
-firebase login --no-localhost
-firebase deploy --only hosting,database
-```
-
-Realtime Database public reads are allowed only for `airhub/logs`. Writes are blocked from the browser; the Raspberry Pi writes with the local legacy database secret in `.env`.
-
-## Local Backups
-
-To export every table from local `airhub_db` into SQL and CSV-compatible copies:
-
-```bash
-bash scripts/export_database.sh
-```
-
-Exports are written to `exports/`.
-## Where To View Data
-
-Local Raspberry Pi kiosk:
-
-```text
-http://127.0.0.1:5000/
-```
-
-Hidden registration dashboard:
-
-```text
-http://127.0.0.1:5000/airhub-register?code=airhub123
-http://127.0.0.1:5000/registration?code=airhub123
-```
-
-Local database/phpMyAdmin:
-
-```text
-http://127.0.0.1/phpmyadmin
-```
-
-Firebase Realtime Database:
-
-```text
-https://console.firebase.google.com/project/airhub-login/database/airhub-login-default-rtdb/data
-```
-
-Firebase Hosting deploy:
-
-```bash
-firebase deploy --only hosting,database
-```
-
-## Refresh After Pull
-
-On the Raspberry Pi after pulling GitHub:
-
-```bash
-cd /home/mako-airhub/loginsys_airhub
-git pull
-bash scripts/update_pi_from_github.sh
-sudo systemctl restart airhub.service
-```
-
-If NFC is not detected:
+## NFC troubleshooting
 
 ```bash
 bash scripts/diagnose_nfc.sh
-sudo systemctl stop pcscd
-sudo systemctl disable pcscd
 sudo systemctl restart airhub.service
+journalctl -u airhub.service -f
 ```
 
-## Old Data Recovery From E Drive
+The service continuously retries a disconnected reader. `pcscd` is disabled during setup because it commonly claims the ACR122U before libnfc.
 
-The original old MariaDB files were found at:
+## Project map
 
 ```text
-E:\var\var\lib\mysql\airhub_db
+app.py                    Flask API, tap-session safeguards, admin routes
+scanner.py                ACR122U standby reader and reconnect loop
+database.py               MySQL students, logs, and sync queue
+firebase_adapter.py       Realtime Database writer
+index.html / script.js    kiosk and reservation experience
+templates/admin.html      student management dashboard
+hosting/                  Firebase-hosted public activity view
+scripts/                  Pi setup, updates, diagnostics, backup, migration
+schema.sql                idempotent local database schema
 ```
 
-Copy the raw folder made on the laptop to the Pi, then dump it:
+## Quality checks
 
 ```bash
-bash scripts/dump_old_raw_mariadb.sh \
-  /home/mako-airhub/old_sql_export/mysql_raw_from_E_var_var_lib_mysql \
-  /home/mako-airhub/old_airhub_real_dump.sql
+python -m compileall -q .
+node --check script.js
+python -m json.tool firebase.json
+python -m json.tool database.rules.json
 ```
 
-Merge into active MySQL/phpMyAdmin and upload to Realtime Database:
+## Contributing
 
-```bash
-bash scripts/migrate_old_sql.sh /home/mako-airhub/old_airhub_real_dump.sql
-source .venv/bin/activate
-python scripts/sync_realtime_db.py
-```
+Focused issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md), get help through [SUPPORT.md](SUPPORT.md), and report vulnerabilities according to [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE)

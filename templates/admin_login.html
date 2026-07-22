@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TapAuth Admin</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="admin-page">
+  <main class="admin-login">
+    <img src="/static/soe_airhub_logo.png" alt="School of Engineering" width="72" height="72">
+    <p class="eyebrow">TapAuth</p>
+    <h1>Student management</h1>
+    <p>Enter the admin code configured on this Raspberry Pi.</p>
+    <form method="get" action="/admin">
+      <label><span>Admin code</span><input name="code" type="password" autocomplete="current-password" required autofocus></label>
+      <button class="primary-action" type="submit">Open dashboard</button>
+    </form>
+    <a class="admin-back" href="/">Back to kiosk</a>
+  </main>
+</body>
+</html>

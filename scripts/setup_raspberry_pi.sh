@@ -26,6 +26,7 @@ set +a
 DB_NAME="${AIRHUB_DB_NAME:-airhub_db}"
 DB_USER="${AIRHUB_DB_USER:-}"
 DB_PASSWORD="${AIRHUB_DB_PASSWORD:-}"
+ADMIN_CODE="${AIRHUB_REGISTRATION_CODE:-}"
 
 if [[ -z "$DB_USER" || -z "$DB_PASSWORD" || "$DB_USER" == "your_mysql_user" || "$DB_PASSWORD" == "your_mysql_password" ]]; then
   cat <<EOF
@@ -34,6 +35,11 @@ Required:
   AIRHUB_DB_USER=...
   AIRHUB_DB_PASSWORD=...
 EOF
+  exit 1
+fi
+
+if [[ -z "$ADMIN_CODE" || "$ADMIN_CODE" == "replace-with-a-private-admin-code" ]]; then
+  echo "Set a private AIRHUB_REGISTRATION_CODE in $ENV_FILE before setup."
   exit 1
 fi
 
@@ -90,7 +96,7 @@ echo "blacklist pn533_usb" | sudo tee /etc/modprobe.d/blacklist-libnfc.conf >/de
 
 sudo tee "/etc/systemd/system/$SERVICE_NAME" >/dev/null <<EOF
 [Unit]
-Description=APC Airhub NFC Flask App
+Description=TapAuth NFC Flask App
 After=network-online.target mariadb.service $UPDATE_SERVICE_NAME
 Wants=network-online.target
 
@@ -109,7 +115,7 @@ EOF
 
 sudo tee "/etc/systemd/system/$UPDATE_SERVICE_NAME" >/dev/null <<EOF
 [Unit]
-Description=Update APC Airhub from GitHub on boot
+Description=Update TapAuth from GitHub on boot
 After=network-online.target mariadb.service
 Wants=network-online.target
 
@@ -131,7 +137,7 @@ if [[ -n "$RUN_HOME" && -d "$RUN_HOME" ]]; then
   sudo -u "$RUN_USER" tee "$AUTOSTART_DIR/airhub-kiosk.desktop" >/dev/null <<EOF
 [Desktop Entry]
 Type=Application
-Name=APC Airhub Kiosk
+Name=TapAuth Kiosk
 Exec=sh -c 'sleep 8; BROWSER=$(command -v chromium-browser || command -v chromium || command -v chromium/chromium); exec "$BROWSER" --kiosk --disable-extensions --disable-background-networking --disable-sync --disable-gpu --noerrdialogs --disable-infobars http://127.0.0.1:5000/'
 X-GNOME-Autostart-enabled=true
 EOF
@@ -143,7 +149,7 @@ sudo systemctl enable "$SERVICE_NAME"
 sudo systemctl restart "$SERVICE_NAME"
 
 cat <<EOF
-APC Airhub setup complete.
+TapAuth setup complete.
 
 Service status:
   sudo systemctl status $SERVICE_NAME
