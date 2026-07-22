@@ -24,6 +24,7 @@ def firebase_status():
         "database_url_configured": bool(FIREBASE_CONFIG["database_url"]),
         "database_secret_configured": bool(FIREBASE_CONFIG["database_secret"]),
         "realtime_database_target": firebase_is_configured(),
+        "root": FIREBASE_CONFIG["root"],
     }
 
 
@@ -52,7 +53,7 @@ def rtdb_rest_url(path):
 
 
 def rtdb_request(path, payload, method, timeout):
-    data = json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")
+    data = None if method == "DELETE" else json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")
     request = urllib.request.Request(
         rtdb_rest_url(path),
         data=data,
@@ -69,6 +70,16 @@ def rtdb_request(path, payload, method, timeout):
 
 def write_rtdb(path, payload):
     rtdb_request(path, payload, "PUT", timeout=10)
+
+
+def delete_user_from_firebase(user_id):
+    if not firebase_is_configured():
+        return {"synced": False, "reason": "Realtime Database is not enabled/configured."}
+    try:
+        rtdb_request(f"{FIREBASE_CONFIG['root']}/users/{user_id}", None, "DELETE", timeout=10)
+        return {"synced": True}
+    except Exception as exc:
+        return {"synced": False, "reason": str(exc)}
 
 
 def update_rtdb(updates):
@@ -114,13 +125,37 @@ def user_payload(user_record):
     }
 
 
+def reservation_payload(record):
+    return {
+        "local_id": record.get("id"),
+        "service": record.get("service"),
+        "fullname": record.get("fullname"),
+        "student_no": record.get("student_no"),
+        "course": record.get("course"),
+        "reservation_date": rtdb_safe(record.get("reservation_date")),
+        "schedule_time": rtdb_safe(record.get("schedule_time")),
+        "duration_minutes": record.get("duration_minutes"),
+        "queue_position": record.get("queue_position"),
+        "teacher_name": record.get("teacher_name"),
+        "project_name": record.get("project_name"),
+        "purpose": record.get("purpose"),
+        "notes": record.get("notes"),
+        "model_file_name": record.get("model_file_name"),
+        "status": record.get("status"),
+        "created_at": rtdb_safe(record.get("created_at")),
+        "updated_at": rtdb_safe(record.get("updated_at")),
+        "synced_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 def sync_log(log_record):
     try:
         if not firebase_is_configured() or not log_record:
             return {"synced": False, "reason": "Realtime Database is not enabled/configured."}
         doc_id = str(log_record.get("id"))
-        write_rtdb(f"airhub/logs/{doc_id}", public_log_payload(log_record))
-        return {"synced": True, "paths": [f"rtdb:airhub/logs/{doc_id}"], "id": doc_id}
+        root = FIREBASE_CONFIG["root"]
+        write_rtdb(f"{root}/logs/{doc_id}", public_log_payload(log_record))
+        return {"synced": True, "paths": [f"rtdb:{root}/logs/{doc_id}"], "id": doc_id}
     except Exception as exc:
         return {"synced": False, "reason": str(exc), "hint": firebase_error_hint(exc)}
 
@@ -130,23 +165,38 @@ def sync_user(user_record):
         if not firebase_is_configured() or not user_record:
             return {"synced": False, "reason": "Realtime Database is not enabled/configured."}
         doc_id = str(user_record.get("id"))
-        write_rtdb(f"airhub/users/{doc_id}", user_payload(user_record))
-        return {"synced": True, "paths": [f"rtdb:airhub/users/{doc_id}"], "id": doc_id}
+        root = FIREBASE_CONFIG["root"]
+        write_rtdb(f"{root}/users/{doc_id}", user_payload(user_record))
+        return {"synced": True, "paths": [f"rtdb:{root}/users/{doc_id}"], "id": doc_id}
     except Exception as exc:
         return {"synced": False, "reason": str(exc), "hint": firebase_error_hint(exc)}
 
 
-def sync_all(users, logs):
+def sync_reservation(record):
+    try:
+        if not firebase_is_configured() or not record:
+            return {"synced": False, "reason": "Realtime Database is not enabled/configured."}
+        doc_id = str(record.get("id"))
+        root = FIREBASE_CONFIG["root"]
+        write_rtdb(f"{root}/reservations/{doc_id}", reservation_payload(record))
+        return {"synced": True, "paths": [f"rtdb:{root}/reservations/{doc_id}"], "id": doc_id}
+    except Exception as exc:
+        return {"synced": False, "reason": str(exc), "hint": firebase_error_hint(exc)}
+
+
+def sync_all(users, logs, reservations=None):
     try:
         if not firebase_is_configured():
             return {"synced": False, "reason": "Realtime Database is not enabled/configured."}
         updates = {}
         for user in users:
-            updates[f"airhub/users/{user.get('id')}"] = user_payload(user)
+            updates[f"{FIREBASE_CONFIG['root']}/users/{user.get('id')}"] = user_payload(user)
         for log in logs:
-            updates[f"airhub/logs/{log.get('id')}"] = public_log_payload(log)
+            updates[f"{FIREBASE_CONFIG['root']}/logs/{log.get('id')}"] = public_log_payload(log)
+        for reservation in reservations or []:
+            updates[f"{FIREBASE_CONFIG['root']}/reservations/{reservation.get('id')}"] = reservation_payload(reservation)
         if updates:
             update_rtdb(updates)
-        return {"synced": True, "users": len(users), "logs": len(logs), "targets": ["realtime_database"]}
+        return {"synced": True, "users": len(users), "logs": len(logs), "reservations": len(reservations or []), "targets": ["realtime_database"]}
     except Exception as exc:
         return {"synced": False, "reason": str(exc), "hint": firebase_error_hint(exc)}

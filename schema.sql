@@ -40,6 +40,32 @@ CREATE TABLE IF NOT EXISTS user_logs (
     INDEX idx_user_logs_card_day (nfc_code, date_logged)
 );
 
+CREATE TABLE IF NOT EXISTS reservations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    service ENUM('printing','teacher') NOT NULL,
+    nfc_code VARCHAR(128) NOT NULL,
+    fullname VARCHAR(255) NOT NULL,
+    student_no VARCHAR(64) NOT NULL,
+    course VARCHAR(100) NOT NULL,
+    reservation_date DATE NOT NULL,
+    schedule_time TIME NULL,
+    duration_minutes INT NULL,
+    queue_position INT NULL,
+    teacher_name VARCHAR(150) NULL,
+    project_name VARCHAR(150) NULL,
+    purpose VARCHAR(255) NULL,
+    notes TEXT NULL,
+    model_file_name VARCHAR(255) NULL,
+    model_file_path VARCHAR(500) NULL,
+    status ENUM('PENDING','APPROVED','DECLINED','COMPLETED','CANCELLED') NOT NULL DEFAULT 'PENDING',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_reservations_date (reservation_date),
+    INDEX idx_reservations_status (status),
+    INDEX idx_reservations_card (nfc_code),
+    UNIQUE KEY uniq_print_queue (service, reservation_date, queue_position)
+);
+
 ALTER TABLE user_logs ADD COLUMN IF NOT EXISTS nfc_code VARCHAR(128) NOT NULL DEFAULT '' AFTER id;
 ALTER TABLE user_logs ADD COLUMN IF NOT EXISTS date_logged TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER nfc_code;
 CREATE INDEX IF NOT EXISTS idx_users_student_no ON users (student_no);
@@ -50,7 +76,7 @@ CREATE INDEX IF NOT EXISTS idx_user_logs_card_day ON user_logs (nfc_code, date_l
 
 CREATE TABLE IF NOT EXISTS firebase_sync_queue (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    record_type ENUM('user','log') NOT NULL,
+    record_type ENUM('user','log','reservation') NOT NULL,
     record_id INT NOT NULL,
     attempts INT NOT NULL DEFAULT 0,
     last_error TEXT NULL,
@@ -60,6 +86,8 @@ CREATE TABLE IF NOT EXISTS firebase_sync_queue (
     UNIQUE KEY uniq_firebase_sync_record (record_type, record_id),
     INDEX idx_firebase_sync_pending (synced_at, updated_at)
 );
+
+ALTER TABLE firebase_sync_queue MODIFY COLUMN record_type ENUM('user','log','reservation') NOT NULL;
 
 CREATE OR REPLACE VIEW user_logs_info AS
 SELECT

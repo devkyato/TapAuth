@@ -236,6 +236,13 @@ body.modal-open { overflow: hidden; }
 .registration-code-form { display: grid; gap: 10px; margin-top: 24px; text-align: left; }
 .registration-code-form label { color: var(--muted); font-size: 13px; font-weight: 750; }
 .registration-code-form .primary-action { width: 100%; margin-top: 2px; }
+.student-registration-form { margin: 18px auto 0; max-width: 620px; }
+.registration-name-grid { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
+.student-registration-form input { min-height: 48px; }
+
+@media (max-width: 620px) {
+  .registration-name-grid { grid-template-columns: 1fr; }
+}
 .code-message { min-height: 20px; margin: 0; color: #b42318; font-size: 12px; }
 
 .dashboard-grid {
@@ -302,6 +309,7 @@ body.modal-open { overflow: hidden; }
   white-space: nowrap;
 }
 .form-modal-bar strong { color: var(--accent-dark); font-size: 14px; }
+.form-error { color: #b42318; font-size: 13px; font-weight: 700; margin: 0 0 8px; min-height: 18px; }
 body.form-modal-open { overflow: hidden; }
 .panel-head { margin-bottom: 14px; }
 .panel-head h2 { margin: 0; font-size: 23px; }

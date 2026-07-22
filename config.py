@@ -19,7 +19,7 @@ else:
             os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
 
 APP_CONFIG = {
-    "name": "APC Airhub",
+    "name": "TapAuth",
     "environment": os.getenv("AIRHUB_ENV", "local"),
     "active_storage": os.getenv("AIRHUB_STORAGE", "mysql"),
     "firebase_ready": True,
@@ -44,7 +44,8 @@ FIREBASE_CONFIG = {
     "database_url": os.getenv("AIRHUB_FIREBASE_DATABASE_URL", ""),
     "database_secret": os.getenv("AIRHUB_FIREBASE_DATABASE_SECRET", ""),
     "project_id": os.getenv("AIRHUB_FIREBASE_PROJECT_ID", ""),
+    "root": os.getenv("AIRHUB_FIREBASE_ROOT", "tapauth").strip("/") or "tapauth",
 }
 ACCESS_CONFIG = {
-    "registration_code": os.getenv("AIRHUB_REGISTRATION_CODE", "prinzispogi"),
+    "registration_code": os.getenv("AIRHUB_REGISTRATION_CODE", ""),
 }

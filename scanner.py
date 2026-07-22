@@ -40,6 +40,7 @@ class NFCStandbyReader:
         self._tap_counter = 0
         self._last_uid = None
         self._last_uid_time = 0.0
+        self._last_tap_timestamp = None
         self._last_message = None
         self._last_log_id = None
         self._last_payload = None
@@ -58,6 +59,7 @@ class NFCStandbyReader:
                 "connected": self._connected,
                 "device": self._device_string,
                 "last_uid": self._last_uid,
+                "last_tap_timestamp": self._last_tap_timestamp,
                 "last_message": self._last_message,
                 "tap_counter": self._tap_counter,
                 "last_error": self._last_error,
@@ -72,6 +74,7 @@ class NFCStandbyReader:
             return {
                 "tap_counter": self._tap_counter,
                 "uid": self._last_uid,
+                "tap_timestamp": self._last_tap_timestamp,
                 "message": self._last_message,
                 "log_id": self._last_log_id,
                 **(self._last_payload or {}),
@@ -99,6 +102,7 @@ class NFCStandbyReader:
         with self._cond:
             self._last_uid = uid
             self._last_uid_time = time.time()
+            self._last_tap_timestamp = time.time()
             self._last_message = message
             self._last_log_id = log_id
             self._last_payload = payload

@@ -13,7 +13,7 @@ echo "== pcscd status =="
 systemctl status pcscd --no-pager || true
 
 echo
-echo "== Airhub service last logs =="
+echo "== TapAuth service last logs =="
 journalctl -u airhub.service -n 80 --no-pager || true
 
 echo

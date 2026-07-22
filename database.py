@@ -17,6 +17,13 @@ USER_COLUMNS = (
     "created_at",
 )
 
+RESERVATION_COLUMNS = (
+    "id", "service", "nfc_code", "fullname", "student_no", "course",
+    "reservation_date", "schedule_time", "duration_minutes", "queue_position",
+    "teacher_name", "project_name", "purpose", "notes", "model_file_name",
+    "model_file_path", "status", "created_at", "updated_at",
+)
+
 
 def get_connection():
     return mysql.connector.connect(**MYSQL_CONFIG)
@@ -228,6 +235,26 @@ def get_all_users():
         close(cursor, conn)
 
 
+def delete_user(user_id):
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            f"SELECT {', '.join(USER_COLUMNS)} FROM users WHERE id=%s",
+            (user_id,),
+        )
+        user = cursor.fetchone()
+        if not user:
+            return None
+        cursor.execute("DELETE FROM users WHERE id=%s", (user_id,))
+        conn.commit()
+        return user
+    finally:
+        close(cursor, conn)
+
+
 def get_all_logs():
     conn = None
     cursor = None
@@ -236,6 +263,86 @@ def get_all_logs():
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT * FROM user_logs_info ORDER BY date_logged ASC, id ASC")
         return cursor.fetchall()
+    finally:
+        close(cursor, conn)
+
+
+def create_reservation(service, nfc_code, fullname, student_no, course, reservation_date,
+                       schedule_time=None, duration_minutes=None, teacher_name=None,
+                       project_name=None, purpose=None, notes=None, model_file_name=None,
+                       model_file_path=None):
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        queue_position = None
+        if service == "printing":
+            cursor.execute(
+                "SELECT COALESCE(MAX(queue_position), 0) + 1 AS next_position "
+                "FROM reservations WHERE service='printing' AND reservation_date=%s FOR UPDATE",
+                (reservation_date,),
+            )
+            queue_position = int((cursor.fetchone() or {}).get("next_position") or 1)
+        cursor.execute(
+            """
+            INSERT INTO reservations
+            (service, nfc_code, fullname, student_no, course, reservation_date,
+             schedule_time, duration_minutes, queue_position, teacher_name,
+             project_name, purpose, notes, model_file_name, model_file_path)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """,
+            (service, nfc_code, fullname, student_no, course, reservation_date,
+             schedule_time, duration_minutes, queue_position, teacher_name,
+             project_name, purpose, notes, model_file_name, model_file_path),
+        )
+        reservation_id = cursor.lastrowid
+        conn.commit()
+        return get_reservation_by_id(reservation_id)
+    finally:
+        close(cursor, conn)
+
+
+def get_reservation_by_id(reservation_id):
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            f"SELECT {', '.join(RESERVATION_COLUMNS)} FROM reservations WHERE id=%s",
+            (reservation_id,),
+        )
+        return cursor.fetchone()
+    finally:
+        close(cursor, conn)
+
+
+def get_reservations(limit=100):
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            f"SELECT {', '.join(RESERVATION_COLUMNS)} FROM reservations "
+            "ORDER BY reservation_date ASC, queue_position ASC, created_at ASC LIMIT %s",
+            (limit,),
+        )
+        return cursor.fetchall()
+    finally:
+        close(cursor, conn)
+
+
+def update_reservation_status(reservation_id, status):
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE reservations SET status=%s WHERE id=%s", (status, reservation_id))
+        conn.commit()
+        return get_reservation_by_id(reservation_id) if cursor.rowcount else None
     finally:
         close(cursor, conn)
 

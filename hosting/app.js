@@ -90,7 +90,7 @@ function renderLogs(snapshot) {
 updateClock();
 setInterval(updateClock, 1000);
 
-const logsQuery = query(ref(db, "airhub/logs"), orderByChild("date_logged"), limitToLast(6));
+const logsQuery = query(ref(db, "tapauth/logs"), orderByChild("date_logged"), limitToLast(6));
 onValue(logsQuery, (snapshot) => {
     syncState.textContent = "Live";
     renderLogs(snapshot);
