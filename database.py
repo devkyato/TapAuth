@@ -1,6 +1,7 @@
 import mysql.connector
 
 from config import MYSQL_CONFIG
+from nfc_utils import canonicalize_nfc_uid
 
 
 USER_COLUMNS = (
@@ -67,6 +68,9 @@ def normalize(value):
 
 
 def create_user(student_no, lastname, firstname, middlename, course, project_type, room, nfc_code):
+    nfc_code = canonicalize_nfc_uid(nfc_code)
+    if not nfc_code:
+        raise ValueError("A valid NFC UID is required.")
     fullname = " ".join(
         part for part in (normalize(firstname), normalize(middlename), normalize(lastname)) if part
     )
@@ -99,7 +103,7 @@ def create_user(student_no, lastname, firstname, middlename, course, project_typ
                 normalize(course),
                 normalize(project_type),
                 normalize(room),
-                nfc_code.strip(),
+                nfc_code,
             ),
         )
         conn.commit()
@@ -112,6 +116,7 @@ def create_user(student_no, lastname, firstname, middlename, course, project_typ
 
 
 def insert_log(nfc_code):
+    nfc_code = canonicalize_nfc_uid(nfc_code)
     conn = None
     cursor = None
     try:
@@ -126,6 +131,7 @@ def insert_log(nfc_code):
 
 
 def is_user_checked_in(nfc_code):
+    nfc_code = canonicalize_nfc_uid(nfc_code)
     conn = None
     cursor = None
     try:
@@ -151,6 +157,9 @@ def get_user_fullname(nfc_code):
 
 
 def get_user_by_nfc(nfc_code):
+    nfc_code = canonicalize_nfc_uid(nfc_code)
+    if not nfc_code:
+        return None
     conn = None
     cursor = None
     try:
@@ -161,10 +170,30 @@ def get_user_by_nfc(nfc_code):
             SELECT {", ".join(USER_COLUMNS)}
             FROM users
             WHERE nfc_code=%s
+               OR REPLACE(
+                    UPPER(
+                      REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+                          TRIM(nfc_code), ':', ''), '-', ''), ' ', ''), '.', ''), '_', '')
+                    ),
+                    '0X',
+                    ''
+                  )=%s
+            ORDER BY (nfc_code=%s) DESC, id DESC
+            LIMIT 1
             """,
-            (nfc_code,),
+            (nfc_code, nfc_code, nfc_code),
         )
-        return cursor.fetchone()
+        user = cursor.fetchone()
+        if user and user.get("nfc_code") != nfc_code:
+            old_nfc_code = user.get("nfc_code")
+            try:
+                cursor.execute("UPDATE users SET nfc_code=%s WHERE id=%s", (nfc_code, user["id"]))
+                cursor.execute("UPDATE user_logs SET nfc_code=%s WHERE nfc_code=%s", (nfc_code, old_nfc_code))
+                conn.commit()
+                user["nfc_code"] = nfc_code
+            except mysql.connector.IntegrityError:
+                conn.rollback()
+        return user
     finally:
         close(cursor, conn)
 

@@ -2,6 +2,8 @@ import subprocess
 import threading
 import time
 
+from nfc_utils import canonicalize_nfc_uid
+
 try:
     from pynfc import Nfc, Timeout
 except Exception as exc:
@@ -127,6 +129,10 @@ class NFCStandbyReader:
             self._cond.notify_all()
 
     def _accept_tap(self, uid):
+        uid = canonicalize_nfc_uid(uid)
+        if not uid:
+            self._set_error("NFC reader returned an empty UID")
+            return
         now = time.time()
         with self._lock:
             if uid == self._last_uid and (now - self._last_uid_time) < self.debounce_seconds:
@@ -195,7 +201,7 @@ class NFCStandbyReader:
                     if self._stop.is_set():
                         break
                     try:
-                        self._accept_tap(target.uid.decode())
+                        self._accept_tap(target.uid)
                     except Timeout:
                         pass
                     except Exception as exc:

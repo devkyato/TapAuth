@@ -27,6 +27,7 @@ from database import (
     update_reservation_status,
 )
 from scanner import NFCStandbyReader
+from nfc_utils import canonicalize_nfc_uid
 from firebase_adapter import delete_user_from_firebase, firebase_status
 from sync_service import retry_pending, sync_log_or_queue, sync_reservation_or_queue, sync_user_or_queue
 
@@ -35,9 +36,54 @@ app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024
 sync_queue = queue.Queue(maxsize=500)
 tap_action_lock = threading.Lock()
 processed_tap_counters = set()
+recent_registration_cache = {}
+registration_cache_lock = threading.Lock()
 TAP_SESSION_MAX_AGE_SECONDS = 120
 ALLOWED_MODEL_EXTENSIONS = {"stl", "obj", "3mf"}
 MODEL_UPLOAD_DIR = Path(app.root_path) / "uploads" / "models"
+REGISTRATION_CACHE_SECONDS = 15 * 60
+
+
+def cache_registered_user(uid, user):
+    uid = canonicalize_nfc_uid(uid)
+    if not uid or not user:
+        return
+    with registration_cache_lock:
+        recent_registration_cache[uid] = {
+            "expires_at": time.time() + REGISTRATION_CACHE_SECONDS,
+            "user": dict(user),
+        }
+
+
+def get_cached_registered_user(uid):
+    uid = canonicalize_nfc_uid(uid)
+    with registration_cache_lock:
+        cached = recent_registration_cache.get(uid)
+        if not cached:
+            return None
+        if cached["expires_at"] < time.time():
+            recent_registration_cache.pop(uid, None)
+            return None
+        return dict(cached["user"])
+
+
+def lookup_registered_user(uid, attempts=3):
+    uid = canonicalize_nfc_uid(uid)
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            user = get_user_by_nfc(uid)
+            if user:
+                cache_registered_user(uid, user)
+                return user, None
+        except Exception as exc:
+            last_error = exc
+            if attempt + 1 < attempts:
+                time.sleep(0.08 * (attempt + 1))
+    cached = get_cached_registered_user(uid)
+    if cached:
+        return cached, last_error
+    return None, last_error
 
 
 @app.errorhandler(413)
@@ -74,14 +120,24 @@ threading.Thread(target=firebase_sync_worker, daemon=True).start()
 
 def handle_tap(uid):
     """Publish the card event first; the kiosk asks what the tap is for."""
+    uid = canonicalize_nfc_uid(uid)
+    user, lookup_error = lookup_registered_user(uid)
     try:
-        user = get_user_by_nfc(uid)
         checked_in = is_user_checked_in(uid) if user else False
     except Exception as exc:
-        app.logger.warning("Unable to identify tapped card: %s", exc)
-        user = None
+        app.logger.warning("Unable to read attendance state: %s", exc)
         checked_in = False
+    if lookup_error:
+        app.logger.warning("NFC registration lookup needed fallback: %s", lookup_error)
     if not user:
+        if lookup_error:
+            return {
+                "message": "Unable to verify this school ID",
+                "payload": {
+                    "lookup_unavailable": True,
+                    "lookup_message": "The student database is temporarily unavailable. Please tap again.",
+                },
+            }
         return {"message": "School ID detected"}
     return {
         "message": f"{user.get('fullname')} · ID detected",
@@ -118,8 +174,10 @@ def admin_authorized():
 
 
 def valid_latest_tap(uid, tap_counter):
+    uid = canonicalize_nfc_uid(uid)
     latest = nfc_reader.latest_tap(-1)
-    if not latest or latest.get("uid") != uid or latest.get("tap_counter") != tap_counter:
+    latest_uid = canonicalize_nfc_uid(latest.get("uid")) if latest else ""
+    if not latest or latest_uid != uid or latest.get("tap_counter") != tap_counter:
         return None
     tapped_at = latest.get("tap_timestamp")
     if not tapped_at or time.time() - float(tapped_at) > TAP_SESSION_MAX_AGE_SECONDS:
@@ -214,7 +272,7 @@ def latest_tap():
 def tap_action():
     data = request.get_json(silent=True) or {}
     action = data.get("action")
-    uid = str(data.get("uid") or "").strip()
+    uid = canonicalize_nfc_uid(data.get("uid"))
     try:
         tap_counter = int(data.get("tap_counter"))
     except (TypeError, ValueError):
@@ -285,7 +343,7 @@ def validate_registration_code():
 def register_from_tap():
     """Register an unknown card only while its current NFC tap session is valid."""
     data = request.get_json(silent=True) or {}
-    uid = str(data.get("uid") or "").strip()
+    uid = canonicalize_nfc_uid(data.get("uid"))
     try:
         tap_counter = int(data.get("tap_counter"))
     except (TypeError, ValueError):
@@ -301,7 +359,9 @@ def register_from_tap():
         return jsonify({"error": "Complete all required student details."}), 400
 
     try:
-        existing_user = get_user_by_nfc(uid)
+        existing_user, lookup_error = lookup_registered_user(uid)
+        if lookup_error and not existing_user:
+            raise lookup_error
         if existing_user:
             nfc_reader.cache_registered_user(uid, {
                 **existing_user,
@@ -336,6 +396,7 @@ def register_from_tap():
             "course": user_record.get("course"),
             "checked_in": False,
         }
+        cache_registered_user(uid, user_record)
         nfc_reader.cache_registered_user(uid, user_response)
         enqueue_sync("user", user_record)
         return jsonify({
@@ -365,6 +426,8 @@ def admin_delete_user(user_id):
     user = delete_user(user_id)
     if not user:
         return jsonify({"error": "Student not found."}), 404
+    with registration_cache_lock:
+        recent_registration_cache.pop(canonicalize_nfc_uid(user.get("nfc_code")), None)
     firebase_result = delete_user_from_firebase(user_id)
     return jsonify({
         "success": True,
@@ -375,7 +438,7 @@ def admin_delete_user(user_id):
 
 @app.route("/reservations", methods=["POST"])
 def create_reservation_request():
-    uid = str(request.form.get("uid") or "").strip()
+    uid = canonicalize_nfc_uid(request.form.get("uid"))
     try:
         tap_counter = int(request.form.get("tap_counter"))
     except (TypeError, ValueError):

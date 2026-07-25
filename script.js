@@ -49,6 +49,7 @@
   const registrationCodeStep = document.querySelector("#registration-code-step");
   const tapResult = document.querySelector("#tap-result");
   const dialogTitle = document.querySelector("#dialog-title");
+  const dialogQuestion = document.querySelector("#dialog-question");
   const dialogIdentity = document.querySelector("#dialog-identity");
   const registeredActions = document.querySelector("#registered-actions");
   const unregisteredActions = document.querySelector("#unregistered-actions");
@@ -241,6 +242,7 @@
     currentTap = tap;
     const user = tap.user || {};
     const registered = Boolean(user.fullname && user.student_no);
+    const lookupUnavailable = Boolean(tap.lookupUnavailable);
     const checkedIn = Boolean(user.checked_in ?? tap.checkedIn ?? false);
     const firstName = user.firstname || String(user.fullname || "").trim().split(/\s+/)[0] || "there";
     tap.registered = registered;
@@ -251,12 +253,19 @@
       ? "Record your departure from AIRHub now."
       : "Record your attendance and enter AIRHub now.";
     countdownActionLabel.textContent = checkedIn ? "check-out" : "check-in";
-    dialogTitle.textContent = registered ? greetingFor(firstName) : "Hey there!";
-    dialogIdentity.textContent = registered
+    dialogTitle.textContent = lookupUnavailable
+      ? "Unable to verify this ID"
+      : (registered ? greetingFor(firstName) : "Hey there!");
+    dialogQuestion.textContent = lookupUnavailable
+      ? "Please tap again in a moment."
+      : "What would you like to do?";
+    dialogIdentity.textContent = lookupUnavailable
+      ? (tap.lookupMessage || "The student database is temporarily unavailable.")
+      : registered
       ? `${user.fullname} - ${user.student_no} - ${user.course || "Program not provided"}`
       : "This school ID is not registered yet.";
     registeredActions.hidden = !registered;
-    unregisteredActions.hidden = registered;
+    unregisteredActions.hidden = registered || lookupUnavailable;
     registrationCodeForm.reset();
     registrationCodeMessage.textContent = "";
     showDialogStep("tap");
@@ -692,7 +701,9 @@
         uid: data.uid,
         tapCounter: data.tap_counter,
         message: data.message || "School ID detected",
-        user: data.user || null
+        user: data.user || null,
+        lookupUnavailable: Boolean(data.lookup_unavailable),
+        lookupMessage: data.lookup_message || ""
       });
     } catch (_) {
       // Polling automatically resumes when the Raspberry Pi service is reachable.
