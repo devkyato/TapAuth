@@ -88,6 +88,23 @@ class NFCStandbyReader:
             if isinstance(user, dict):
                 user["checked_in"] = bool(checked_in)
 
+    def cache_registered_user(self, uid, user):
+        """Replace a just-registered card's stale unknown-card cache."""
+        with self._lock:
+            if self._last_uid != uid:
+                return False
+            safe_user = {
+                "firstname": user.get("firstname"),
+                "fullname": user.get("fullname"),
+                "student_no": user.get("student_no"),
+                "course": user.get("course"),
+                "checked_in": bool(user.get("checked_in", False)),
+            }
+            self._last_payload = {"user": safe_user}
+            self._last_message = f"{safe_user.get('fullname') or 'Student'} · ID registered"
+            self._cooldown.pop(uid, None)
+            return True
+
     def _set_error(self, message):
         with self._lock:
             self._last_error = message

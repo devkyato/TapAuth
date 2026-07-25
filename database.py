@@ -103,7 +103,10 @@ def create_user(student_no, lastname, firstname, middlename, course, project_typ
             ),
         )
         conn.commit()
-        return get_user_by_nfc(nfc_code)
+        user = get_user_by_nfc(nfc_code)
+        if not user:
+            raise RuntimeError("The student record could not be read after registration.")
+        return user
     finally:
         close(cursor, conn)
 

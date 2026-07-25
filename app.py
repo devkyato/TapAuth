@@ -294,8 +294,6 @@ def register_from_tap():
     latest = valid_latest_tap(uid, tap_counter)
     if not latest:
         return jsonify({"error": "This tap has expired. Tap your card again."}), 409
-    if get_user_by_nfc(uid):
-        return jsonify({"error": "This card is already registered."}), 409
 
     required = ("student_no", "firstname", "lastname", "course")
     missing = [field for field in required if not str(data.get(field) or "").strip()]
@@ -303,6 +301,24 @@ def register_from_tap():
         return jsonify({"error": "Complete all required student details."}), 400
 
     try:
+        existing_user = get_user_by_nfc(uid)
+        if existing_user:
+            nfc_reader.cache_registered_user(uid, {
+                **existing_user,
+                "checked_in": is_user_checked_in(uid),
+            })
+            return jsonify({
+                "success": True,
+                "message": "This card is already registered.",
+                "user": {
+                    "firstname": existing_user.get("firstname"),
+                    "fullname": existing_user.get("fullname"),
+                    "student_no": existing_user.get("student_no"),
+                    "course": existing_user.get("course"),
+                    "checked_in": is_user_checked_in(uid),
+                },
+            })
+
         user_record = create_user(
             student_no=str(data["student_no"]),
             lastname=str(data["lastname"]),
@@ -313,17 +329,19 @@ def register_from_tap():
             room="AIRHUB",
             nfc_code=uid,
         )
+        user_response = {
+            "firstname": user_record.get("firstname"),
+            "fullname": user_record.get("fullname"),
+            "student_no": user_record.get("student_no"),
+            "course": user_record.get("course"),
+            "checked_in": False,
+        }
+        nfc_reader.cache_registered_user(uid, user_response)
         enqueue_sync("user", user_record)
         return jsonify({
             "success": True,
             "message": "Registration complete.",
-            "user": {
-                "firstname": user_record.get("firstname"),
-                "fullname": user_record.get("fullname"),
-                "student_no": user_record.get("student_no"),
-                "course": user_record.get("course"),
-                "checked_in": False,
-            },
+            "user": user_response,
         })
     except Exception as exc:
         app.logger.exception("Tap registration failed")

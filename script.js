@@ -449,6 +449,10 @@
       currentTap.user = data.user;
       currentTap.registered = true;
       openTapDialog(currentTap);
+      setTapBanner("Registration complete", "Your school ID is now linked to your student profile.", {
+        kind: "success",
+        timeout: 5000
+      });
     } catch (error) {
       registrationCodeMessage.textContent = error.message;
     } finally {
