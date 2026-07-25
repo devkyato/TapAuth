@@ -5,6 +5,7 @@
   const ALLOWED_FILES = ["stl", "obj", "3mf"];
   const MAX_FILE_SIZE = 100 * 1024 * 1024;
   const RESERVATION_TIMEOUT_SECONDS = 60;
+  const MAX_RECENT_LOGS = 25;
   const TAP_BANNER_RESET_MS = 3200;
   const isRaspberryPiRuntime = document.body.dataset.runtime === "pi";
   const GREETINGS = [
@@ -34,6 +35,10 @@
   const reservationList = document.querySelector("#reservation-list");
   const reservationFormMessage = document.querySelector("#reservation-form-message");
   const logsList = document.querySelector("#logs-list");
+  const logsPanel = document.querySelector(".logs-panel");
+  const logsTableWrap = logsPanel?.querySelector(".table-wrap");
+  const toggleLogsButton = document.querySelector("#toggle-logs");
+  const logsCount = document.querySelector("#logs-count");
   const clock = document.querySelector("#clock");
 
   const dialogBackdrop = document.querySelector("#tap-dialog-backdrop");
@@ -83,6 +88,8 @@
   let appointmentBusy = false;
   let previewCheckedIn = false;
   let printingStep = 1;
+  let recentLogs = [];
+  let logsExpanded = false;
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, (character) => ({
@@ -297,8 +304,7 @@
     }
   }
 
-  function addTapToLog(record = {}) {
-    logsList.querySelector(".empty-row")?.remove();
+  function logRow(record = {}) {
     const row = document.createElement("tr");
     const eventName = record.event_type || "LOGIN";
     const className = eventName.toLowerCase() === "logout" ? "logout" : "login";
@@ -309,8 +315,57 @@
       ? new Date(timeValue.replace(" ", "T")).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
       : new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
     row.innerHTML = `<td><span class="event-pill ${className}">${escapeHtml(eventName)}</span></td><td>${escapeHtml(name)}</td><td>${escapeHtml(studentNumber)}</td><td>${escapeHtml(time)}</td>`;
-    logsList.prepend(row);
-    if (logsList.rows.length > 5) logsList.deleteRow(logsList.rows.length - 1);
+    return row;
+  }
+
+  function fittedLogLimit() {
+    if (!logsPanel || !logsTableWrap) return 5;
+    const panelStyle = getComputedStyle(logsPanel);
+    const heading = logsPanel.querySelector(".panel-head");
+    const headingStyle = heading ? getComputedStyle(heading) : null;
+    const shell = document.querySelector(".airhub-shell");
+    const shellStyle = shell ? getComputedStyle(shell) : null;
+    const panelPadding = parseFloat(panelStyle.paddingTop) + parseFloat(panelStyle.paddingBottom);
+    const headingHeight = heading?.offsetHeight || 58;
+    const headingMargin = parseFloat(headingStyle?.marginBottom || "14");
+    const headerHeight = logsPanel.querySelector("thead")?.offsetHeight || 36;
+    const shellBottomPadding = parseFloat(shellStyle?.paddingBottom || "10");
+    const rowHeight = logsList.querySelector("tr:not(.empty-row)")?.getBoundingClientRect().height || 46;
+    const availableHeight = window.innerHeight
+      - logsPanel.getBoundingClientRect().top
+      - shellBottomPadding
+      - panelPadding
+      - headingHeight
+      - headingMargin
+      - headerHeight
+      - 42;
+    return Math.max(5, Math.min(MAX_RECENT_LOGS, Math.floor(availableHeight / rowHeight)));
+  }
+
+  function renderRecentLogs() {
+    if (recentLogs.length === 0) {
+      logsList.innerHTML = '<tr class="empty-row"><td colspan="4">No logs yet.</td></tr>';
+      toggleLogsButton.hidden = true;
+      logsPanel.classList.remove("is-expanded");
+      return;
+    }
+
+    const collapsedLimit = fittedLogLimit();
+    const visibleLogs = logsExpanded ? recentLogs : recentLogs.slice(0, collapsedLimit);
+    logsList.replaceChildren(...visibleLogs.map(logRow));
+    const hasMore = recentLogs.length > collapsedLimit;
+    toggleLogsButton.hidden = !hasMore;
+    logsPanel.classList.toggle("is-expanded", logsExpanded && hasMore);
+    toggleLogsButton.querySelector("span").textContent = logsExpanded ? "See less" : "See more";
+    logsCount.textContent = logsExpanded ? "" : `${recentLogs.length} recent`;
+  }
+
+  function addTapToLog(record = {}) {
+    recentLogs = [
+      record,
+      ...recentLogs.filter((item) => !record.id || item.id !== record.id)
+    ].slice(0, MAX_RECENT_LOGS);
+    renderRecentLogs();
   }
 
   async function processTapAction(tap, action) {
@@ -597,12 +652,13 @@
       const response = await fetch("/user_logs_info");
       if (!response.ok) return;
       const rows = await response.json();
-      logsList.innerHTML = "";
       if (!Array.isArray(rows) || rows.length === 0) {
-        logsList.innerHTML = '<tr class="empty-row"><td colspan="4">No logs yet.</td></tr>';
+        recentLogs = [];
+        renderRecentLogs();
         return;
       }
-      rows.slice(0, 5).reverse().forEach((row) => addTapToLog(row));
+      recentLogs = rows.slice(0, MAX_RECENT_LOGS);
+      renderRecentLogs();
     } catch (_) {
       // The reader keeps running if the local database is temporarily unavailable.
     }
@@ -668,6 +724,11 @@
   closeDialogButton.addEventListener("click", closeTapDialog);
   finishTapButton.addEventListener("click", closeTapDialog);
   cancelReservationButton.addEventListener("click", () => cancelReservation("cancelled"));
+  toggleLogsButton.addEventListener("click", () => {
+    logsExpanded = !logsExpanded;
+    renderRecentLogs();
+    if (!logsExpanded) logsPanel.scrollIntoView({ block: "nearest" });
+  });
   printingPrevButton?.addEventListener("click", () => showPrintingStep(printingStep - 1));
   printingNextButton?.addEventListener("click", () => {
     if (!validatePrintingStep(printingStep)) return;
@@ -735,6 +796,9 @@
   fetchReservations();
   setInterval(updateClock, 15000);
   if (isRaspberryPiRuntime) setInterval(pollLatestTap, 1200);
+  window.addEventListener("resize", () => {
+    if (!logsExpanded && recentLogs.length) renderRecentLogs();
+  });
 
   window.airhub = Object.freeze({
     openTapDialog: (tap) => openTapDialog(tap)

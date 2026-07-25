@@ -315,6 +315,44 @@ body.form-modal-open { overflow: hidden; }
 .panel-head h2 { margin: 0; font-size: 23px; }
 
 .table-wrap { overflow-x: auto; }
+.logs-panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.logs-panel .table-wrap {
+  min-height: 0;
+  scrollbar-gutter: stable;
+}
+.logs-panel.is-expanded .table-wrap {
+  max-height: clamp(220px, calc(100svh - 360px), 620px);
+  overflow-y: auto;
+}
+.logs-panel.is-expanded .data-table thead {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  background: var(--surface);
+}
+.table-more {
+  align-self: flex-start;
+  margin-top: 12px;
+  padding: 5px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-dark);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.table-more small {
+  margin-left: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.table-more:hover { color: var(--ink); }
+.table-more:focus-visible { outline: 3px solid rgba(240, 74, 35, .22); outline-offset: 3px; }
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table th,
 .data-table td { padding: 12px 9px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }

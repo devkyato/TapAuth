@@ -537,7 +537,7 @@ def retry_firebase_sync():
 @app.route("/user_logs_info")
 def user_logs_info():
     try:
-        return jsonify(get_logs(limit=8))
+        return jsonify(get_logs(limit=25))
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
