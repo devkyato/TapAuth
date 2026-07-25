@@ -26,7 +26,7 @@ Open `http://127.0.0.1:4173`. The Flask, MySQL, NFC, and Firebase services are u
 - NFC tap-in and tap-out with automatic state detection
 - Fast registration directly after an unknown card is tapped—no shared student code
 - 3D printing and teacher appointment request flows with Pi-local model storage
-- Local-first MySQL storage with a durable Firebase retry queue
+- Durable on-device NFC registry with MySQL reconciliation and a Firebase retry queue
 - Private student directory and code-protected management dashboard
 - Firebase Realtime Database live copy and public-safe attendance feed
 - Automatic Raspberry Pi startup, kiosk mode, reader reconnection, and GitHub updates
@@ -38,8 +38,9 @@ Open `http://127.0.0.1:4173`. The Flask, MySQL, NFC, and Firebase services are u
 ACR122U card tap
       │
       ▼
-Raspberry Pi + Flask ───► Local MySQL (source of truth)
+Raspberry Pi + Flask ───► On-device NFC registry
       │                         │
+      ├────────────────────► Local MySQL
       │                         └── offline-safe retry queue
       ▼
 Firebase Realtime Database ───► hosted/public activity view
@@ -76,6 +77,7 @@ AIRHUB_DB_USER=airhub_app
 AIRHUB_DB_PASSWORD=replace-with-a-strong-password
 AIRHUB_DB_NAME=airhub_db
 TAPAUTH_ADMIN_CODE=replace-with-a-private-admin-code
+TAPAUTH_REGISTRY_PATH=
 ```
 
 To enable Firebase copying:
@@ -141,6 +143,8 @@ The service continuously retries a disconnected reader. `pcscd` is disabled duri
 ```text
 app.py                    Flask API, tap-session safeguards, admin routes
 scanner.py                ACR122U standby reader and reconnect loop
+nfc_utils.py               stable UID normalization across reader formats
+local_registry.py          durable MySQL-independent card recognition
 database.py               MySQL students, logs, and sync queue
 firebase_adapter.py       Realtime Database writer
 index.html / script.js    kiosk and reservation experience

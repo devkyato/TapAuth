@@ -257,7 +257,7 @@
       ? "Unable to verify this ID"
       : (registered ? greetingFor(firstName) : "Hey there!");
     dialogQuestion.textContent = lookupUnavailable
-      ? "Please tap again in a moment."
+      ? "The database is offline. You can still register this card on this device."
       : "What would you like to do?";
     dialogIdentity.textContent = lookupUnavailable
       ? (tap.lookupMessage || "The student database is temporarily unavailable.")
@@ -265,7 +265,7 @@
       ? `${user.fullname} - ${user.student_no} - ${user.course || "Program not provided"}`
       : "This school ID is not registered yet.";
     registeredActions.hidden = !registered;
-    unregisteredActions.hidden = registered || lookupUnavailable;
+    unregisteredActions.hidden = registered;
     registrationCodeForm.reset();
     registrationCodeMessage.textContent = "";
     showDialogStep("tap");

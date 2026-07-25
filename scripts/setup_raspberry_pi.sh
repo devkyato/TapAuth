@@ -81,6 +81,7 @@ FLUSH PRIVILEGES;
 SQL
 
 MYSQL_PWD="$DB_PASSWORD" mysql -u "$DB_USER" "$DB_NAME" < "$PROJECT_DIR/schema.sql"
+"$PROJECT_DIR/.venv/bin/python" "$PROJECT_DIR/scripts/sync_local_registry.py" || echo "Warning: MySQL registry import failed; TapAuth will create the local registry on first registration."
 
 sudo usermod -aG plugdev "$RUN_USER" || true
 cat <<'EOF' | sudo tee /etc/udev/rules.d/99-acr122u.rules >/dev/null

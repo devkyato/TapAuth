@@ -4,6 +4,7 @@ All notable TapAuth changes are documented here.
 
 ## Unreleased
 
+- Added a durable, atomic on-device NFC registry that recognizes assigned cards without MySQL and reconciles automatically when MySQL returns.
 - Canonicalized ACR122U UIDs across raw bytes and common text formats, with legacy-record self-healing, database retries, and a recent-registration fallback cache.
 - Expanded Recent Logs to the latest 25 records with responsive row fitting and a See more control.
 - Fixed newly registered cards appearing unregistered during the NFC cooldown window.

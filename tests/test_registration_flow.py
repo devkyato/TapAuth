@@ -9,6 +9,19 @@ class RegistrationFlowTests(unittest.TestCase):
     def setUp(self):
         with app_module.registration_cache_lock:
             app_module.recent_registration_cache.clear()
+        self.local_lookup = patch.object(app_module, "get_local_user", return_value=None)
+        self.local_save = patch.object(
+            app_module,
+            "save_local_user",
+            side_effect=lambda user, uid=None: {
+                **user,
+                "nfc_code": uid or user.get("nfc_code"),
+            },
+        )
+        self.local_lookup.start()
+        self.local_save.start()
+        self.addCleanup(self.local_lookup.stop)
+        self.addCleanup(self.local_save.stop)
 
     def test_reader_cache_becomes_registered_immediately(self):
         reader = NFCStandbyReader(on_tap=lambda _uid: {"message": "School ID detected"})
@@ -123,6 +136,33 @@ class RegistrationFlowTests(unittest.TestCase):
 
         self.assertTrue(result["payload"]["lookup_unavailable"])
         self.assertNotIn("user", result["payload"])
+
+    @patch.object(app_module.nfc_reader, "cache_registered_user")
+    @patch.object(app_module, "create_user", side_effect=RuntimeError("database offline"))
+    @patch.object(app_module, "get_user_by_nfc", return_value=None)
+    @patch.object(app_module, "valid_latest_tap", return_value={"uid": "CARD-2", "tap_counter": 9})
+    def test_registration_succeeds_in_local_registry_without_mysql(
+        self,
+        _valid_tap,
+        _get_user,
+        _create_user,
+        cache_registered_user,
+    ):
+        client = app_module.app.test_client()
+
+        response = client.post("/register_from_tap", json={
+            "uid": "CARD-2",
+            "tap_counter": 9,
+            "firstname": "Mika",
+            "lastname": "Cruz",
+            "student_no": "2026-00002",
+            "course": "BS Computer Engineering",
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["storage"], "local_registry")
+        self.assertEqual(response.get_json()["user"]["student_no"], "2026-00002")
+        cache_registered_user.assert_called_once()
 
 
 if __name__ == "__main__":

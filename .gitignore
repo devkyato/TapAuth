@@ -15,6 +15,7 @@ venv/
 
 exports/
 uploads/
+data/
 *.log
 
 *.sqlite

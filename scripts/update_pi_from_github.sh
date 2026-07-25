@@ -60,6 +60,7 @@ FLUSH PRIVILEGES;
 SQL
 
 MYSQL_PWD="$DB_PASSWORD" mysql -u "$DB_USER" "$DB_NAME" < schema.sql
+.venv/bin/python scripts/sync_local_registry.py || echo "Warning: MySQL registry import failed; the existing local NFC registry remains available."
 sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE_NAME"
 if [[ "${AIRHUB_SKIP_SERVICE_RESTART:-0}" != "1" ]]; then

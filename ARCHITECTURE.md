@@ -1,6 +1,6 @@
 # TapAuth architecture
 
-TapAuth is a local-first NFC attendance and reservation kiosk designed for a Raspberry Pi. Local MySQL is the source of truth; Firebase Realtime Database is an optional, retryable copy for remote visibility.
+TapAuth is a local-first NFC attendance and reservation kiosk designed for a Raspberry Pi. A private on-device registry keeps card identity available without MySQL; MySQL stores the complete operational records, and Firebase Realtime Database is an optional, retryable remote copy.
 
 ## Runtime flow
 
@@ -9,17 +9,19 @@ ACR122U NFC reader
         |
         v
 Raspberry Pi / Flask ----> MySQL
+        |              \----> private on-device NFC registry
         |                    |
         |                    +---- durable Firebase retry queue
         v
 Firebase Realtime Database ----> public-safe activity page
 ```
 
-The reader runs continuously and reconnects after hardware interruptions. A card tap creates a short-lived session. A registered card may check in/out or request an appointment; an unknown card may register only while its matching physical tap session remains valid.
+The reader runs continuously and reconnects after hardware interruptions. A card tap creates a short-lived session. Card identity is checked against the durable local registry first, so an assigned card remains recognized through service restarts and MySQL outages. Registry records reconcile back to MySQL when it becomes available.
 
 ## Data ownership
 
 - `users`: private student profile and card association in MySQL; mirrored to private Firebase data without the NFC UID.
+- `data/registered_cards.json`: private Pi-local identity fallback with restricted file permissions, atomic replacement, and a backup copy; ignored by Git.
 - `logs`: complete local attendance record; mirrored to the public path with event and timing fields only.
 - `reservations`: requester and request details in MySQL; mirrored to private Firebase data without NFC UIDs or local file paths.
 - `uploads/models`: Pi-local 3D files; ignored by Git and never copied to Realtime Database.

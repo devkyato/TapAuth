@@ -28,12 +28,14 @@ from database import (
 )
 from scanner import NFCStandbyReader
 from nfc_utils import canonicalize_nfc_uid
+from local_registry import delete_local_user, get_local_user, save_local_user
 from firebase_adapter import delete_user_from_firebase, firebase_status
 from sync_service import retry_pending, sync_log_or_queue, sync_reservation_or_queue, sync_user_or_queue
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024
 sync_queue = queue.Queue(maxsize=500)
+registry_reconcile_queue = queue.Queue(maxsize=100)
 tap_action_lock = threading.Lock()
 processed_tap_counters = set()
 recent_registration_cache = {}
@@ -69,11 +71,21 @@ def get_cached_registered_user(uid):
 
 def lookup_registered_user(uid, attempts=3):
     uid = canonicalize_nfc_uid(uid)
+    local_user = get_local_user(uid)
+    if local_user:
+        cache_registered_user(uid, local_user)
+        try:
+            registry_reconcile_queue.put_nowait(dict(local_user))
+        except queue.Full:
+            pass
+        return local_user, None
+
     last_error = None
     for attempt in range(attempts):
         try:
             user = get_user_by_nfc(uid)
             if user:
+                save_local_user(user, uid)
                 cache_registered_user(uid, user)
                 return user, None
         except Exception as exc:
@@ -116,6 +128,31 @@ def firebase_sync_worker():
 
 
 threading.Thread(target=firebase_sync_worker, daemon=True).start()
+
+
+def registry_reconcile_worker():
+    while True:
+        user = registry_reconcile_queue.get()
+        try:
+            record = create_user(
+                student_no=str(user.get("student_no") or ""),
+                lastname=str(user.get("lastname") or ""),
+                firstname=str(user.get("firstname") or ""),
+                middlename=str(user.get("middlename") or ""),
+                course=str(user.get("course") or ""),
+                project_type=str(user.get("project_type") or "STUDENT"),
+                room=str(user.get("room") or "AIRHUB"),
+                nfc_code=str(user.get("nfc_code") or ""),
+            )
+            save_local_user(record)
+            enqueue_sync("user", record)
+        except Exception as exc:
+            app.logger.debug("Local registration is waiting for MySQL: %s", exc)
+        finally:
+            registry_reconcile_queue.task_done()
+
+
+threading.Thread(target=registry_reconcile_worker, daemon=True).start()
 
 
 def handle_tap(uid):
@@ -360,12 +397,14 @@ def register_from_tap():
 
     try:
         existing_user, lookup_error = lookup_registered_user(uid)
-        if lookup_error and not existing_user:
-            raise lookup_error
         if existing_user:
+            try:
+                checked_in = is_user_checked_in(uid)
+            except Exception:
+                checked_in = False
             nfc_reader.cache_registered_user(uid, {
                 **existing_user,
-                "checked_in": is_user_checked_in(uid),
+                "checked_in": checked_in,
             })
             return jsonify({
                 "success": True,
@@ -375,20 +414,41 @@ def register_from_tap():
                     "fullname": existing_user.get("fullname"),
                     "student_no": existing_user.get("student_no"),
                     "course": existing_user.get("course"),
-                    "checked_in": is_user_checked_in(uid),
+                    "checked_in": checked_in,
                 },
             })
 
-        user_record = create_user(
-            student_no=str(data["student_no"]),
-            lastname=str(data["lastname"]),
-            firstname=str(data["firstname"]),
-            middlename=str(data.get("middlename") or ""),
-            course=str(data["course"]),
-            project_type="STUDENT",
-            room="AIRHUB",
-            nfc_code=uid,
-        )
+        firstname = str(data["firstname"]).strip().upper()
+        lastname = str(data["lastname"]).strip().upper()
+        middlename = str(data.get("middlename") or "").strip().upper()
+        local_record = save_local_user({
+            "student_no": str(data["student_no"]).strip(),
+            "lastname": lastname,
+            "firstname": firstname,
+            "middlename": middlename,
+            "fullname": " ".join(part for part in (firstname, middlename, lastname) if part),
+            "course": str(data["course"]).strip().upper(),
+            "project_type": "STUDENT",
+            "room": "AIRHUB",
+            "nfc_code": uid,
+        })
+        mysql_saved = False
+        try:
+            user_record = create_user(
+                student_no=str(data["student_no"]),
+                lastname=str(data["lastname"]),
+                firstname=str(data["firstname"]),
+                middlename=str(data.get("middlename") or ""),
+                course=str(data["course"]),
+                project_type="STUDENT",
+                room="AIRHUB",
+                nfc_code=uid,
+            )
+            save_local_user(user_record, uid)
+            mysql_saved = True
+        except Exception as exc:
+            app.logger.warning("Registration saved locally while MySQL is unavailable: %s", exc)
+            user_record = local_record
         user_response = {
             "firstname": user_record.get("firstname"),
             "fullname": user_record.get("fullname"),
@@ -398,10 +458,12 @@ def register_from_tap():
         }
         cache_registered_user(uid, user_record)
         nfc_reader.cache_registered_user(uid, user_response)
-        enqueue_sync("user", user_record)
+        if mysql_saved:
+            enqueue_sync("user", user_record)
         return jsonify({
             "success": True,
-            "message": "Registration complete.",
+            "message": "Registration complete." if mysql_saved else "Registration saved on this device.",
+            "storage": "mysql_and_local" if mysql_saved else "local_registry",
             "user": user_response,
         })
     except Exception as exc:
@@ -428,6 +490,7 @@ def admin_delete_user(user_id):
         return jsonify({"error": "Student not found."}), 404
     with registration_cache_lock:
         recent_registration_cache.pop(canonicalize_nfc_uid(user.get("nfc_code")), None)
+    delete_local_user(user.get("nfc_code"))
     firebase_result = delete_user_from_firebase(user_id)
     return jsonify({
         "success": True,
