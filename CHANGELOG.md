@@ -6,6 +6,7 @@ All notable TapAuth changes are documented here.
 
 - Fixed newly registered cards appearing unregistered during the NFC cooldown window.
 - Added a post-write persistence check and registration-flow regression tests.
+- Added the server dependencies required by registration tests to CI.
 
 ## 1.0.0 — 2026-07-22
 
