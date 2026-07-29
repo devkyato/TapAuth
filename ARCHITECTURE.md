@@ -1,47 +1,62 @@
-# TapAuth architecture
+# How TapAuth works
 
-TapAuth is a local-first NFC attendance and reservation kiosk designed for a Raspberry Pi. A private on-device registry keeps card identity available without MySQL; MySQL stores the complete operational records, and Firebase Realtime Database is an optional, retryable remote copy.
+TapAuth is local-first because the Raspberry Pi is the one device that should remain useful even when another service is unavailable.
 
-## Runtime flow
+## A tap, from card to record
+
+When a card is tapped, the ACR122U reader sends its UID to the Flask application. TapAuth normalizes that UID so raw reader bytes and common text formats resolve to one stable value.
+
+The application checks the private on-device registry first:
 
 ```text
-ACR122U NFC reader
-        |
-        v
-Raspberry Pi / Flask ----> MySQL
-        |              \----> private on-device NFC registry
-        |                    |
-        |                    +---- durable Firebase retry queue
-        v
-Firebase Realtime Database ----> public-safe activity page
+ACR122U reader
+      |
+      v
+UID normalization
+      |
+      v
+On-device registry
+      |
+      +-- known card --> check in, check out, or appointment
+      |
+      +-- unknown card --> short-lived registration session
 ```
 
-The reader runs continuously and reconnects after hardware interruptions. A card tap creates a short-lived session. Card identity is checked against the durable local registry first, so an assigned card remains recognized through service restarts and MySQL outages. Registry records reconcile back to MySQL when it becomes available.
+I thought about relying only on MySQL here, but that makes a registered card appear unknown whenever the connection has a temporary problem. The registry avoids that. A successful database lookup or registration refreshes the local copy, and a background worker reconciles locally saved students when MySQL returns.
 
-## Data ownership
+## Where each kind of data belongs
 
-- `users`: private student profile and card association in MySQL; mirrored to private Firebase data without the NFC UID.
-- `data/registered_cards.json`: private Pi-local identity fallback with restricted file permissions, atomic replacement, and a backup copy; ignored by Git.
-- `logs`: complete local attendance record; mirrored to the public path with event and timing fields only.
-- `reservations`: requester and request details in MySQL; mirrored to private Firebase data without NFC UIDs or local file paths.
-- `uploads/models`: Pi-local 3D files; ignored by Git and never copied to Realtime Database.
+| Data | Primary location | Other copies |
+| --- | --- | --- |
+| Card identity fallback | `data/registered_cards.json` | Reconciled with MySQL |
+| Students | MySQL `users` | Private Firebase copy without NFC UID |
+| Attendance | MySQL `logs` | Public-safe Firebase event copy |
+| Reservations | MySQL `reservations` | Private Firebase copy |
+| 3D model files | Pi-local `uploads/models` | Never copied to Firebase |
 
-Firebase paths live below the configurable `tapauth` root. Database rules allow public reads only for `tapauth/logs`; browsers cannot write any path.
+The local registry uses atomic replacement, keeps a backup copy, and applies restricted file permissions when supported. Its directory is ignored by Git.
 
-## Availability model
+## When something is offline
 
-Attendance and reservations complete against local MySQL even when Firebase is unavailable. Failed cloud writes enter `firebase_sync_queue`, and the background worker retries them without blocking the kiosk.
+- **MySQL unavailable:** known cards are still recognized and new registrations can be saved locally. Local identities are queued for reconciliation.
+- **Firebase unavailable:** normal local operations continue. Failed remote writes remain in `firebase_sync_queue` for retry.
+- **NFC reader disconnected:** the scanner keeps retrying instead of terminating the service.
+- **Browser refreshed:** the server remains the source of truth for real NFC sessions.
 
-## Security boundary
+MySQL still owns complete attendance and reservation operations. The registry specifically removes MySQL as a single point of failure for card recognition and registration.
 
-- Student registration must match the latest NFC UID and tap counter and expires after 120 seconds.
-- The management dashboard requires `TAPAUTH_ADMIN_CODE` and is intended for a trusted local network.
-- Public API responses remove NFC UIDs and model storage paths.
-- `.env`, database exports, uploaded models, Firebase secrets, and service-account files are excluded from Git.
-- The Firebase browser key identifies the public web application; it is not an administrator credential.
+## Privacy boundary
 
-For an internet-facing deployment, place the Flask service behind HTTPS, network authentication, and a reverse proxy rather than exposing port 5000 directly.
+Oh! This part matters: the public activity feed never needs a student's card UID or full profile.
 
-## Extension points
+- Public responses contain sanitized event and timing fields.
+- NFC UIDs and model-file paths are removed from public Firebase records.
+- Registration must match the latest physical tap and expires after 120 seconds.
+- The local management page requires `TAPAUTH_ADMIN_CODE`.
+- `.env`, registry data, uploads, exports, and server credentials stay outside Git.
 
-Database access, Firebase synchronization, NFC reading, and presentation are separated into modules. A future hosted API, email provider, or object-storage adapter can be added without changing the kiosk interaction model.
+If Flask is exposed beyond a trusted local network, place it behind HTTPS, authentication, and a reverse proxy.
+
+## Main extension points
+
+The reader, database, Firebase adapter, local registry, and interface are separate modules. A hosted API, email service, or object-storage adapter can be added without rewriting the NFC interaction itself.

@@ -1,10 +1,12 @@
-# TapAuth support
+# Getting TapAuth unstuck
 
-Before opening an issue:
+I would check the system in this order:
 
-1. Run `bash scripts/diagnose_nfc.sh` for reader problems.
-2. Check `sudo systemctl status airhub.service` and `journalctl -u airhub.service -n 100`.
-3. Open `/system_status` on the Raspberry Pi.
-4. Run `python scripts/diagnose_firebase.py` for sync problems.
+1. Open `/system_status` on the Raspberry Pi.
+2. Run `sudo systemctl status airhub.service`.
+3. Read the latest service output with `journalctl -u airhub.service -n 100`.
+4. For reader problems, run `bash scripts/diagnose_nfc.sh`.
+5. For Firebase problems, run `python scripts/diagnose_firebase.py`.
+6. Restart cleanly with `sudo systemctl restart airhub.service`.
 
-When filing a public issue, share error messages and versions, but remove student information, NFC UIDs, passwords, tokens, and `.env` values.
+If you open a public issue, include the error, Raspberry Pi OS version, Python version, and reader model. Remove student information, NFC UIDs, passwords, tokens, and `.env` values first.
