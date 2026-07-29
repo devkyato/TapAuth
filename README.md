@@ -1,4 +1,4 @@
-# TapAuth — NFC access and reservations
+# TapAuth
 
 ![TapAuth repository cover](docs/assets/github-cover.png)
 
@@ -7,50 +7,55 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-ready-C51A4A.svg)](scripts/setup_raspberry_pi.sh)
 
-TapAuth is an open-source, Raspberry Pi-ready NFC attendance and reservation kiosk. It pairs an ACR122U reader with a lightweight Flask app, keeps working from local MySQL when the internet is unavailable, and mirrors students and attendance logs to Firebase Realtime Database.
+TapAuth is my Raspberry Pi NFC attendance and reservation system for the Asia Pacific College School of Engineering AIRHub.
 
-Built for the Asia Pacific College School of Engineering AIRHub by [@devkyato](https://github.com/devkyato).
+I started this as a straightforward tap-in and tap-out kiosk. Then I thought about what happens when the internet drops, MySQL restarts, or a newly registered card is tapped again immediately. That changed the project: the Pi now recognizes cards from its own durable registry first, keeps normal kiosk interactions fast, and reconciles data with MySQL and Firebase when those services are available.
 
-## Try the interface locally
+## What it does
 
-The repository includes a dependency-free preview that uses browser storage and simulated NFC taps:
+- Detects whether a registered NFC card should check in or check out.
+- Lets an unknown card register through a short, tap-bound session.
+- Keeps registered cards recognizable without depending on MySQL for every tap.
+- Supports 3D printing requests and teacher appointments.
+- Shows the latest 25 activity records, with a compact **See more** view.
+- Provides a private student and reservation management page.
+- Mirrors safe activity data to Firebase without exposing NFC identifiers.
+- Runs without a frontend build step: Flask, Python, HTML, CSS, and JavaScript.
+
+## The part I wanted to get right
+
+Oh! On card registration, saving a student once is not enough if the next lookup depends entirely on a database connection. TapAuth stores a private copy at `data/registered_cards.json` on the Pi. The write is atomic, a backup is kept, and the directory is ignored by Git.
+
+The tap flow is:
+
+```text
+NFC card
+   |
+   v
+Local card registry ---- recognized immediately
+   |
+   +---- MySQL available? ---- sync student and attendance data
+   |
+   +---- Firebase available? - copy approved private/public records
+```
+
+MySQL remains the main operational database. The local registry is the recognition fallback, not a public student database. Firebase is an optional remote copy and public-safe activity source.
+
+## Try the interface
+
+The browser preview uses simulated taps and local browser storage:
 
 ```bash
 python -m http.server 4173
 ```
 
-Open `http://127.0.0.1:4173`. The Flask, MySQL, NFC, and Firebase services are used only by the Raspberry Pi runtime.
+Open `http://127.0.0.1:4173`.
 
-## Highlights
+For the real NFC flow, run the Flask application on a Raspberry Pi with an ACR122U reader.
 
-- NFC tap-in and tap-out with automatic state detection
-- Fast registration directly after an unknown card is tapped—no shared student code
-- 3D printing and teacher appointment request flows with Pi-local model storage
-- Durable on-device NFC registry with MySQL reconciliation and a Firebase retry queue
-- Private student directory and code-protected management dashboard
-- Firebase Realtime Database live copy and public-safe attendance feed
-- Automatic Raspberry Pi startup, kiosk mode, reader reconnection, and GitHub updates
-- Plain HTML, CSS, JavaScript, and Python; no frontend build step
+## Install on a Raspberry Pi
 
-## How it works
-
-```text
-ACR122U card tap
-      │
-      ▼
-Raspberry Pi + Flask ───► On-device NFC registry
-      │                         │
-      ├────────────────────► Local MySQL
-      │                         └── offline-safe retry queue
-      ▼
-Firebase Realtime Database ───► hosted/public activity view
-```
-
-Unknown cards receive a short-lived registration session tied to that exact physical tap. Registered cards can check in/out or open the appointment flow. Student NFC identifiers never appear in public Firebase records or the admin API.
-
-## Quick start on Raspberry Pi
-
-Requirements: Raspberry Pi OS, an ACR122U USB NFC reader, internet for first-time setup, and a Firebase Realtime Database if cloud sync is wanted.
+You need Raspberry Pi OS, an ACR122U USB NFC reader, and internet access for the first installation. Firebase is optional.
 
 ```bash
 git clone https://github.com/devkyato/TapAuth.git
@@ -60,27 +65,28 @@ nano .env
 bash scripts/setup_raspberry_pi.sh
 ```
 
-The setup script installs MariaDB, Python dependencies, libnfc, udev permissions, the `airhub.service` systemd unit, boot-time Git updates, and Chromium kiosk startup.
+The setup script installs MariaDB, Python dependencies, libnfc, reader permissions, the `airhub.service` systemd unit, and Chromium kiosk startup.
 
-Open:
+After setup:
 
 - Kiosk: `http://127.0.0.1:5000/`
 - Student management: `http://127.0.0.1:5000/admin`
-- Health and reader status: `http://127.0.0.1:5000/system_status`
+- System status: `http://127.0.0.1:5000/system_status`
 
-## Environment
+## Configuration
 
-Start from [.env.example](.env.example). At minimum, set a strong MySQL password and admin code:
+Copy [.env.example](.env.example) to `.env`. At minimum, replace these values:
 
 ```env
 AIRHUB_DB_USER=airhub_app
 AIRHUB_DB_PASSWORD=replace-with-a-strong-password
 AIRHUB_DB_NAME=airhub_db
 TAPAUTH_ADMIN_CODE=replace-with-a-private-admin-code
-TAPAUTH_REGISTRY_PATH=
 ```
 
-To enable Firebase copying:
+`TAPAUTH_REGISTRY_PATH` may be left blank to use `data/registered_cards.json`.
+
+To enable Firebase:
 
 ```env
 AIRHUB_FIREBASE_ENABLED=true
@@ -91,14 +97,11 @@ AIRHUB_FIREBASE_PROJECT_ID=your-project-id
 AIRHUB_FIREBASE_ROOT=tapauth
 ```
 
-The Firebase browser `apiKey` is a public project identifier, not an admin credential. Keep the Realtime Database secret, service-account files, `.env`, and MySQL password out of Git.
+The Firebase browser `apiKey` identifies the web app; it is not an administrator secret. Never commit `.env`, database secrets, service-account files, student records, or NFC UIDs.
 
-## Firebase setup
+## Firebase copy
 
-1. Create a Firebase project and Realtime Database.
-2. Copy your web app configuration into `hosting/firebase-config.js`.
-3. Configure the server-side values in the Raspberry Pi `.env`.
-4. Deploy the included rules and hosting files:
+I treated Firebase as a synchronized view, not as a requirement for tapping a card. This keeps the kiosk usable on the local network even when cloud access is interrupted.
 
 ```bash
 npm install -g firebase-tools
@@ -107,28 +110,28 @@ firebase use your-project-id
 firebase deploy --only database,hosting
 ```
 
-Student and reservation data is private under `tapauth/users` and `tapauth/reservations`. Only event and timing fields in the public-safe `tapauth/logs` feed are readable from the hosted page. Administrators can inspect the complete database in the Firebase Console or use the Pi-local `/admin` dashboard.
-
-To copy all existing MySQL students and logs into Firebase:
+To copy existing MySQL records:
 
 ```bash
 source .venv/bin/activate
 python scripts/sync_realtime_db.py
 ```
 
-## Updating a Raspberry Pi
+Private users and reservations live below `tapauth/users` and `tapauth/reservations`. Only sanitized event and timing fields under `tapauth/logs` are publicly readable.
+
+## Update an installed Pi
 
 ```bash
-cd /home/mako-airhub/TapAuth
-git pull
+cd ~/TapAuth
+git pull --ff-only origin main
 bash scripts/update_pi_from_github.sh
 sudo systemctl restart airhub.service
 sudo systemctl status airhub.service
 ```
 
-For a non-default deployment branch, set `TAPAUTH_GIT_BRANCH` in `.env`.
+The update script also reconciles MySQL students with the local card registry. If MySQL is temporarily unavailable, the existing local registry stays usable.
 
-## NFC troubleshooting
+## If the reader is not responding
 
 ```bash
 bash scripts/diagnose_nfc.sh
@@ -136,31 +139,33 @@ sudo systemctl restart airhub.service
 journalctl -u airhub.service -f
 ```
 
-The service continuously retries a disconnected reader. `pcscd` is disabled during setup because it commonly claims the ACR122U before libnfc.
+TapAuth retries disconnected readers automatically. The setup disables `pcscd` because it can claim the ACR122U before libnfc.
 
-## Project map
+## Project guide
 
-```text
-app.py                    Flask API, tap-session safeguards, admin routes
-scanner.py                ACR122U standby reader and reconnect loop
-nfc_utils.py               stable UID normalization across reader formats
-local_registry.py          durable MySQL-independent card recognition
-database.py               MySQL students, logs, and sync queue
-firebase_adapter.py       Realtime Database writer
-index.html / script.js    kiosk and reservation experience
-templates/admin.html      student management dashboard
-hosting/                  Firebase-hosted public activity view
-scripts/                  Pi setup, updates, diagnostics, backup, migration
-schema.sql                idempotent local database schema
-tests/                    privacy and Firebase boundary checks
-```
+| Path | Purpose |
+| --- | --- |
+| `app.py` | Flask API, tap sessions, registration, attendance, and admin routes |
+| `scanner.py` | ACR122U reader loop and reconnection |
+| `nfc_utils.py` | Stable UID normalization |
+| `local_registry.py` | Durable card-recognition fallback |
+| `database.py` | MySQL students, logs, reservations, and sync queue |
+| `firebase_adapter.py` | Firebase Realtime Database writer |
+| `index.html`, `script.js` | Kiosk and reservation interface |
+| `templates/admin.html` | Local management page |
+| `hosting/` | Firebase-hosted public activity page |
+| `scripts/` | Setup, update, sync, diagnostics, backup, and migration |
+| `tests/` | Registration, privacy, UID, registry, and activity tests |
 
-## Quality checks
+For a deeper technical reference, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Check everything
 
 ```bash
 python -m compileall -q .
 node --check script.js
 node --check hosting/app.js
+node --check hosting/firebase-config.js
 python -m json.tool firebase.json
 python -m json.tool database.rules.json
 python -m unittest discover -s tests -v
@@ -168,8 +173,8 @@ python -m unittest discover -s tests -v
 
 ## Contributing
 
-Focused issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md), get help through [SUPPORT.md](SUPPORT.md), and report vulnerabilities privately according to [SECURITY.md](SECURITY.md).
+This is a personal project, but focused issues and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md), use [SUPPORT.md](SUPPORT.md) for diagnostics, and report security problems privately through [SECURITY.md](SECURITY.md).
 
 ## License
 
-[MIT](LICENSE)
+TapAuth is available under the [MIT License](LICENSE).
