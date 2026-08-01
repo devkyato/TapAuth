@@ -46,6 +46,33 @@ class LocalRegistryTests(unittest.TestCase):
 
                 self.assertEqual(loaded["student_no"], "2026-1")
 
+    def test_save_preserves_valid_backup_when_primary_registry_is_corrupt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry_path = Path(directory) / "registered_cards.json"
+            backup_path = Path(directory) / "registered_cards.backup.json"
+            backup_path.write_text(
+                '{"version":1,"users":{"CARD1":{"nfc_code":"CARD1","student_no":"2026-1"}}}',
+                encoding="utf-8",
+            )
+            registry_path.write_text("{not-json", encoding="utf-8")
+            with (
+                patch.object(local_registry, "REGISTRY_PATH", registry_path),
+                patch.object(local_registry, "REGISTRY_BACKUP_PATH", backup_path),
+            ):
+                local_registry.save_local_user({
+                    "student_no": "2026-2",
+                    "nfc_code": "CARD2",
+                })
+
+                self.assertEqual(
+                    local_registry._read_path(backup_path)["users"]["CARD1"]["student_no"],
+                    "2026-1",
+                )
+                self.assertEqual(
+                    local_registry._read_path(registry_path)["users"]["CARD2"]["student_no"],
+                    "2026-2",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
