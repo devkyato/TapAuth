@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-ready-C51A4A.svg)](scripts/setup_raspberry_pi.sh)
 
-TapAuth is my Raspberry Pi NFC attendance and reservation system for the Asia Pacific College School of Engineering AIRHub.
+TapAuth is my Raspberry Pi NFC attendance and reservation system for the Asia Pacific College School of Engineering AIRHub. Version **1.1.0** is the current release: local-first card registration with durable offline recognition and optional MySQL/Firebase reconciliation.
 
 I started this as a straightforward tap-in and tap-out kiosk. Then I thought about what happens when the internet drops, MySQL restarts, or a newly registered card is tapped again immediately. That changed the project: the Pi now recognizes cards from its own durable registry first, keeps normal kiosk interactions fast, and reconciles data with MySQL and Firebase when those services are available.
 
@@ -170,6 +170,17 @@ python -m json.tool firebase.json
 python -m json.tool database.rules.json
 python -m unittest discover -s tests -v
 ```
+
+## Connected projects
+
+| Project | Role |
+| --- | --- |
+| **[OpenNet](https://github.com/devkyato/OpenNet)** | Typed ONP/1 messaging for ESP32, Raspberry Pi, and backends |
+| **[Datary](https://github.com/devkyato/Datary)** | Local-first laboratory for reproducible program and simulation evidence |
+| **[Relay](https://github.com/devkyato/Relay)** | Timing-risk source review for control programs |
+| **[Lowpack](https://github.com/devkyato/Lowpack)** | Local-first, application-aware lossless packing |
+| **[Custom Arduino Libraries](https://github.com/devkyato/Custom-Arduino-Libraries)** | Non-blocking LED and digital-output patterns |
+| **[Arduino Programs Guide](https://github.com/devkyato/Arduino-Programs-Guide)** | Safety-first, compile-checked Arduino Uno course |
 
 ## Contributing
 
