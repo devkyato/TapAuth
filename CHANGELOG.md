@@ -2,6 +2,17 @@
 
 This file records the changes I would want to know about before updating an installed TapAuth kiosk.
 
+## 1.1.2 — 2026-08-09
+
+- Overhaul the Zenodo presentation with sanitizer-safe sections for use,
+  limits, documentation, related software, and citation.
+- Expand citation metadata without asserting a DOI, ORCID, or legal name.
+- Add getting-started, operations index, release notes, and a release
+  checklist.
+- Clarify that TapAuth is the product regardless of checkout-folder name and
+  that it is a deployed application rather than a published source package.
+- Keep kiosk, NFC, registry, MySQL, and Firebase behaviour unchanged.
+
 ## 1.1.1 — 2026-08-09
 
 - Add Zenodo and Citation File Format metadata for archival citation.

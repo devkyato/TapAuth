@@ -6,8 +6,9 @@
 [![Latest release](https://img.shields.io/github/v/release/devkyato/TapAuth)](https://github.com/devkyato/TapAuth/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-ready-C51A4A.svg)](scripts/setup_raspberry_pi.sh)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21853282.svg)](https://doi.org/10.5281/zenodo.21853282)
 
-TapAuth is my Raspberry Pi NFC attendance and reservation system for the Asia Pacific College School of Engineering AIRHub. Version **1.1.1** is the current release: local-first card registration with durable offline recognition and optional MySQL/Firebase reconciliation.
+TapAuth is my Raspberry Pi NFC attendance and reservation system for the Asia Pacific College School of Engineering AIRHub. Version **1.1.2** is the current release: local-first card registration with durable offline recognition and optional MySQL/Firebase reconciliation. The name of a checkout folder does not define the product; this repository, application, and archive are **TapAuth**.
 
 I started this as a straightforward tap-in and tap-out kiosk. Then I thought about what happens when the internet drops, MySQL restarts, or a newly registered card is tapped again immediately. That changed the project: the Pi now recognizes cards from its own durable registry first, keeps normal kiosk interactions fast, and reconciles data with MySQL and Firebase when those services are available.
 
@@ -50,6 +51,12 @@ python -m http.server 4173
 ```
 
 Open `http://127.0.0.1:4173`.
+
+The terminal output is the ordinary Python server log; a successful start includes:
+
+```text
+Serving HTTP on 0.0.0.0 port 4173 (http://0.0.0.0:4173/) ...
+```
 
 For the real NFC flow, run the Flask application on a Raspberry Pi with an ACR122U reader.
 
@@ -158,6 +165,8 @@ TapAuth retries disconnected readers automatically. The setup disables `pcscd` b
 | `tests/` | Registration, privacy, UID, registry, and activity tests |
 
 For a deeper technical reference, see [ARCHITECTURE.md](ARCHITECTURE.md).
+For task-oriented setup, operations, security, and release notes, use the
+[documentation index](docs/README.md).
 
 ## Check everything
 
@@ -171,12 +180,22 @@ python -m json.tool database.rules.json
 python -m unittest discover -s tests -v
 ```
 
+## Limitations and deployment status
+
+TapAuth is a personal, deployment-oriented Raspberry Pi application, not a
+hosted service or a source package. Real NFC workflows require an ACR122U and
+the permissions and services installed by the setup script. MySQL remains the
+main operational database; the local registry only keeps card recognition
+available, and Firebase is optional. Browser preview storage and simulated
+taps do not reproduce hardware, service outages, or production data handling.
+Keep backups and test updates on the target Pi.
+
 ## Citation
 
 If you use this software in research or teaching, please cite the Zenodo archive / this repository:
 
 ```text
-devkyato. (2026). TapAuth: Raspberry Pi NFC attendance and reservation kiosk with local-first registration (Version 1.1.1).
+@dev.mako (devkyato). (2026). TapAuth: Raspberry Pi NFC attendance and reservation kiosk with local-first registration (Version 1.1.2).
 ```
 
 See [CITATION.cff](CITATION.cff) for machine-readable metadata.
@@ -199,9 +218,14 @@ See [CITATION.cff](CITATION.cff) for machine-readable metadata.
 | **[Custom Arduino Libraries](https://github.com/devkyato/Custom-Arduino-Libraries)** | Non-blocking LED and digital-output patterns |
 | **[Arduino Programs Guide](https://github.com/devkyato/Arduino-Programs-Guide)** | Safety-first, compile-checked Arduino Uno course |
 
-## Contributing
+## Security and contributing
 
-This is a personal project, but focused issues and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md), use [SUPPORT.md](SUPPORT.md) for diagnostics, and report security problems privately through [SECURITY.md](SECURITY.md).
+This is a personal project, but focused issues and pull requests are welcome.
+Source, configuration, NFC identifiers, and student data need different
+handling: never commit `.env`, credentials, database exports, service-account
+files, records, or UIDs. Please read [CONTRIBUTING.md](CONTRIBUTING.md), use
+[SUPPORT.md](SUPPORT.md) for diagnostics, and report security problems
+privately through [SECURITY.md](SECURITY.md).
 
 ## License
 
