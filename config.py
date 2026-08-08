@@ -20,7 +20,7 @@ else:
 
 APP_CONFIG = {
     "name": "TapAuth",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "environment": os.getenv("AIRHUB_ENV", "local"),
     "active_storage": os.getenv("AIRHUB_STORAGE", "mysql"),
     "firebase_ready": True,

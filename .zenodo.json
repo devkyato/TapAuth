@@ -1,0 +1,21 @@
+{
+  "creators": [{"name": "devkyato", "affiliation": "MATA Company"}],
+  "contributors": [{"name": "Cursor Agent", "type": "Other"}],
+  "title": "TapAuth: Raspberry Pi NFC attendance and reservation kiosk with local-first registration",
+  "description": "TapAuth is a Raspberry Pi NFC attendance and reservation kiosk with local-first card registration and recognition. It keeps normal kiosk interactions usable through a durable local registry while reconciling operational data with optional MySQL and Firebase services. Usage: install the application on a Raspberry Pi with a supported NFC reader, configure local credentials, and run the kiosk service. Applications include school attendance, laboratory access logging, equipment reservations, and campus maker-space workflows.",
+  "version": "1.1.1",
+  "keywords": ["TapAuth", "NFC", "Raspberry Pi", "attendance", "reservation", "offline-first", "Flask", "education", "kiosk"],
+  "license": "mit",
+  "upload_type": "software",
+  "access_right": "open",
+  "language": "eng",
+  "related_identifiers": [
+    {"identifier": "https://github.com/devkyato/TapAuth", "relation": "isSupplementTo", "resource_type": "software"},
+    {"identifier": "https://github.com/devkyato/Datary", "relation": "references", "resource_type": "software"},
+    {"identifier": "https://github.com/devkyato/OpenNet", "relation": "references", "resource_type": "software"},
+    {"identifier": "https://github.com/devkyato/Lowpack", "relation": "references", "resource_type": "software"},
+    {"identifier": "https://github.com/devkyato/Relay", "relation": "references", "resource_type": "software"},
+    {"identifier": "https://github.com/devkyato/Custom-Arduino-Libraries", "relation": "references", "resource_type": "software"},
+    {"identifier": "https://github.com/devkyato/Arduino-Programs-Guide", "relation": "references", "resource_type": "software"}
+  ]
+}

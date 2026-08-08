@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+title: "TapAuth: Raspberry Pi NFC attendance and reservation kiosk with local-first registration"
+authors:
+  - family-names: devkyato
+    affiliation: "MATA Company"
+version: 1.1.1
+license: MIT
+repository-code: "https://github.com/devkyato/TapAuth"
+url: "https://github.com/devkyato/TapAuth"
+abstract: "A local-first Raspberry Pi NFC attendance and reservation kiosk."
+keywords: [TapAuth, NFC, Raspberry Pi, attendance, reservation, offline-first, Flask, education, kiosk]
+preferred-citation:
+  type: software
+  title: "TapAuth: Raspberry Pi NFC attendance and reservation kiosk with local-first registration"
+  authors:
+    - family-names: devkyato
+      affiliation: "MATA Company"
+  version: 1.1.1

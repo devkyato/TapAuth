@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-ready-C51A4A.svg)](scripts/setup_raspberry_pi.sh)
 
-TapAuth is my Raspberry Pi NFC attendance and reservation system for the Asia Pacific College School of Engineering AIRHub. Version **1.1.0** is the current release: local-first card registration with durable offline recognition and optional MySQL/Firebase reconciliation.
+TapAuth is my Raspberry Pi NFC attendance and reservation system for the Asia Pacific College School of Engineering AIRHub. Version **1.1.1** is the current release: local-first card registration with durable offline recognition and optional MySQL/Firebase reconciliation.
 
 I started this as a straightforward tap-in and tap-out kiosk. Then I thought about what happens when the internet drops, MySQL restarts, or a newly registered card is tapped again immediately. That changed the project: the Pi now recognizes cards from its own durable registry first, keeps normal kiosk interactions fast, and reconciles data with MySQL and Firebase when those services are available.
 
@@ -170,6 +170,23 @@ python -m json.tool firebase.json
 python -m json.tool database.rules.json
 python -m unittest discover -s tests -v
 ```
+
+## Citation
+
+If you use this software in research or teaching, please cite the Zenodo archive / this repository:
+
+```text
+devkyato. (2026). TapAuth: Raspberry Pi NFC attendance and reservation kiosk with local-first registration (Version 1.1.1).
+```
+
+See [CITATION.cff](CITATION.cff) for machine-readable metadata.
+
+## Applications
+
+- Attendance kiosks for schools and laboratories.
+- Local-first NFC card registration and recognition.
+- Maker-space equipment and appointment reservations.
+- Raspberry Pi kiosk deployments with optional service reconciliation.
 
 ## Connected projects
 

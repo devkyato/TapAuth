@@ -2,6 +2,11 @@
 
 This file records the changes I would want to know about before updating an installed TapAuth kiosk.
 
+## 1.1.1 — 2026-08-09
+
+- Add Zenodo and Citation File Format metadata for archival citation.
+- Refresh the published application version and repository citation guidance.
+
 ## 1.1.0 — 2026-07-29
 
 I kept running into one uncomfortable edge case: a student could finish registration, tap again, and still look unregistered if MySQL was slow or unavailable. This release makes card recognition local-first.
