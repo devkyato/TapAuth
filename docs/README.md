@@ -31,6 +31,6 @@ Back up operational data before updates.
 
 - [Contributing](../CONTRIBUTING.md): checks and release checklist.
 - [Changelog](../CHANGELOG.md): user-visible changes.
-- [TapAuth 1.1.2 release notes](releases/1.1.2.md).
+- [TapAuth 1.1.3 release notes](releases/1.1.3.md).
 - [TapAuth 1.1.0 release notes](RELEASE_1.1.0.md).
 - [Citation metadata](../CITATION.cff).

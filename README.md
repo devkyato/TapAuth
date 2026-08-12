@@ -8,7 +8,7 @@
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-ready-C51A4A.svg)](scripts/setup_raspberry_pi.sh)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21853282.svg)](https://doi.org/10.5281/zenodo.21853282)
 
-TapAuth is my Raspberry Pi NFC attendance and reservation system for the Asia Pacific College School of Engineering AIRHub. Version **1.1.2** is the current release: local-first card registration with durable offline recognition and optional MySQL/Firebase reconciliation. The name of a checkout folder does not define the product; this repository, application, and archive are **TapAuth**.
+TapAuth is my Raspberry Pi NFC attendance and reservation system for the Asia Pacific College School of Engineering AIRHub. Version **1.1.3** is the current release: local-first card registration with durable offline recognition and optional MySQL/Firebase reconciliation. The name of a checkout folder does not define the product; this repository, application, and archive are **TapAuth**.
 
 I started this as a straightforward tap-in and tap-out kiosk. Then I thought about what happens when the internet drops, MySQL restarts, or a newly registered card is tapped again immediately. That changed the project: the Pi now recognizes cards from its own durable registry first, keeps normal kiosk interactions fast, and reconciles data with MySQL and Firebase when those services are available.
 
@@ -195,7 +195,7 @@ Keep backups and test updates on the target Pi.
 If you use this software in research or teaching, please cite the Zenodo archive / this repository:
 
 ```text
-@dev.mako (devkyato). (2026). TapAuth: Raspberry Pi NFC attendance and reservation kiosk with local-first registration (Version 1.1.2).
+@dev.mako (devkyato). (2026). TapAuth: Raspberry Pi NFC attendance and reservation kiosk with local-first registration (Version 1.1.3).
 ```
 
 See [CITATION.cff](CITATION.cff) for machine-readable metadata.

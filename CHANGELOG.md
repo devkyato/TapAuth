@@ -4,6 +4,8 @@ This file records the changes I would want to know about before updating an inst
 
 ## Unreleased
 
+## 1.1.3 - 2026-08-12
+
 - Reject the `.env.example` MySQL password placeholder during Raspberry Pi setup.
 - Compare admin/registration codes with `hmac.compare_digest` and accept `X-TapAuth-Code`.
 
