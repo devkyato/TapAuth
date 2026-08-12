@@ -28,7 +28,7 @@ DB_USER="${AIRHUB_DB_USER:-}"
 DB_PASSWORD="${AIRHUB_DB_PASSWORD:-}"
 ADMIN_CODE="${TAPAUTH_ADMIN_CODE:-${AIRHUB_REGISTRATION_CODE:-}}"
 
-if [[ -z "$DB_USER" || -z "$DB_PASSWORD" || "$DB_USER" == "your_mysql_user" || "$DB_PASSWORD" == "your_mysql_password" ]]; then
+if [[ -z "$DB_USER" || -z "$DB_PASSWORD" || "$DB_USER" == "your_mysql_user" || "$DB_PASSWORD" == "your_mysql_password" || "$DB_PASSWORD" == "replace-with-a-strong-password" ]]; then
   cat <<EOF
 Please set real MySQL credentials in $ENV_FILE before setup.
 Required:

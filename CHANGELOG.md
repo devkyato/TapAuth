@@ -2,6 +2,11 @@
 
 This file records the changes I would want to know about before updating an installed TapAuth kiosk.
 
+## Unreleased
+
+- Reject the `.env.example` MySQL password placeholder during Raspberry Pi setup.
+- Compare admin/registration codes with `hmac.compare_digest` and accept `X-TapAuth-Code`.
+
 ## 1.1.2 — 2026-08-09
 
 - Overhaul the Zenodo presentation with sanitizer-safe sections for use,

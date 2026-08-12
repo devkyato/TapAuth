@@ -201,9 +201,12 @@ def registration_authorized():
     supplied = (
         request.args.get("code")
         or request.form.get("access_code")
+        or request.headers.get("X-TapAuth-Code")
         or request.headers.get("X-Airhub-Code")
     )
-    return supplied == code
+    if not supplied:
+        return False
+    return hmac.compare_digest(supplied, code)
 
 
 def admin_authorized():
