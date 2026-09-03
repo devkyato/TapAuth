@@ -59,8 +59,9 @@ def _write_unlocked(data):
         pass
     if REGISTRY_PATH.exists():
         try:
+            _read_path(REGISTRY_PATH)
             shutil.copy2(REGISTRY_PATH, REGISTRY_BACKUP_PATH)
-        except OSError:
+        except (OSError, ValueError, json.JSONDecodeError):
             pass
     os.replace(temporary_path, REGISTRY_PATH)
 
