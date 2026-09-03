@@ -32,10 +32,12 @@ jobs:
         run: |
           node --check script.js
           node --check hosting/app.js
-          node --check hosting/runtime-config.example.js
+          node --check hosting/firebase-config.js
       - name: Check shell scripts
         run: find scripts -name '*.sh' -print0 | xargs -0 -n1 bash -n
       - name: Validate Firebase JSON
-        run: python -m json.tool firebase.json > /dev/null
+        run: |
+          python -m json.tool firebase.json > /dev/null
+          python -m json.tool database.rules.json > /dev/null
       - name: Run privacy boundary tests
         run: python -m unittest discover -s tests -v
