@@ -6,26 +6,28 @@ ENV_FILE="$PROJECT_DIR/.env"
 SERVICE_NAME="airhub.service"
 GIT_BRANCH="${TAPAUTH_GIT_BRANCH:-main}"
 
-if [[ ! -f "$ENV_FILE" ]]; then
-  echo "Missing $ENV_FILE. Copy .env.example to .env and fill it first."
+if [[ ! -f "$ENV_FILE" && ! -f "$PROJECT_DIR/data/settings.json" ]]; then
+  echo "TapAuth is not configured. Run: python3 scripts/configure.py"
   exit 1
 fi
+cd "$PROJECT_DIR"
 
-set -a
-source "$ENV_FILE"
-set +a
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  source "$ENV_FILE"
+  set +a
+fi
 
-DB_NAME="${AIRHUB_DB_NAME:-airhub_db}"
-DB_USER="${AIRHUB_DB_USER:-}"
-DB_PASSWORD="${AIRHUB_DB_PASSWORD:-}"
-STORAGE="${AIRHUB_STORAGE:-sqlite}"
+DB_NAME="${AIRHUB_DB_NAME:-$(python3 -c 'from config import MYSQL_CONFIG; print(MYSQL_CONFIG["database"])')}"
+DB_USER="${AIRHUB_DB_USER:-$(python3 -c 'from config import MYSQL_CONFIG; print(MYSQL_CONFIG["user"])')}"
+DB_PASSWORD="${AIRHUB_DB_PASSWORD:-$(python3 -c 'from config import MYSQL_CONFIG; print(MYSQL_CONFIG["password"])')}"
+STORAGE="${AIRHUB_STORAGE:-$(python3 -c 'from config import APP_CONFIG; print(APP_CONFIG["active_storage"])')}"
+SUPABASE_ENABLED="$(python3 -c 'from config import SUPABASE_CONFIG; print(str(SUPABASE_CONFIG["enabled"]).lower())')"
 
 if [[ "$STORAGE" == "mysql" && ( -z "$DB_USER" || -z "$DB_PASSWORD" ) ]]; then
   echo "AIRHUB_DB_USER and AIRHUB_DB_PASSWORD are required in $ENV_FILE."
   exit 1
 fi
-
-cd "$PROJECT_DIR"
 
 if [[ -x ".venv/bin/python" ]]; then
   .venv/bin/python scripts/backup_local_data.py || echo "Warning: pre-update backup failed; update will continue."
@@ -44,7 +46,7 @@ for _ in 1 2 3 4 5; do
   sleep 2
 done
 if ! timedatectl show -p NTPSynchronized --value 2>/dev/null | grep -q yes; then
-  echo "Warning: system clock is not NTP synchronized yet. Firebase may reject JWT auth until time sync completes."
+  echo "Warning: system clock is not NTP synchronized yet. Cloud timestamps may be inaccurate."
 fi
 
 if [[ -d ".venv" ]]; then
@@ -73,8 +75,8 @@ if [[ "${AIRHUB_SKIP_SERVICE_RESTART:-0}" != "1" ]]; then
   sudo systemctl restart "$SERVICE_NAME"
 fi
 
-if [[ "${AIRHUB_FIREBASE_ENABLED:-false}" == "true" ]]; then
-  .venv/bin/python scripts/sync_realtime_db.py
+if [[ "$SUPABASE_ENABLED" == "true" ]]; then
+  .venv/bin/python scripts/sync_supabase.py || echo "Warning: Supabase is unavailable; pending records remain queued locally."
 fi
 
 echo "Update complete. Service status: sudo systemctl status $SERVICE_NAME"

@@ -92,6 +92,23 @@ CREATE TABLE IF NOT EXISTS firebase_sync_queue (
     synced_at TEXT,
     UNIQUE(record_type, record_id)
 );
+CREATE TABLE IF NOT EXISTS cloud_sync_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    target TEXT NOT NULL,
+    record_type TEXT NOT NULL,
+    record_id INTEGER NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    synced_at TEXT,
+    UNIQUE(target, record_type, record_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cloud_sync_pending ON cloud_sync_queue(target, synced_at, updated_at);
+INSERT OR IGNORE INTO cloud_sync_queue
+  (target, record_type, record_id, attempts, last_error, created_at, updated_at, synced_at)
+SELECT 'supabase', record_type, record_id, attempts, last_error, created_at, updated_at, synced_at
+FROM firebase_sync_queue;
 """
 
 
@@ -317,4 +334,35 @@ def mark_firebase_sync_failed(queue_id, error):
 def get_firebase_queue_count():
     with _connect() as conn:
         row = conn.execute("SELECT SUM(CASE WHEN synced_at IS NULL THEN 1 ELSE 0 END),COUNT(*) FROM firebase_sync_queue").fetchone()
+    return {"pending": int(row[0] or 0), "total": int(row[1] or 0)}
+
+
+def enqueue_cloud_sync(target, record_type, record_id, error=None):
+    with _connect() as conn:
+        conn.execute("""
+            INSERT INTO cloud_sync_queue(target,record_type,record_id,last_error) VALUES(?,?,?,?)
+            ON CONFLICT(target,record_type,record_id) DO UPDATE SET synced_at=NULL,
+              last_error=excluded.last_error,updated_at=datetime('now','localtime')
+        """, (target, record_type, record_id, error))
+
+
+def get_pending_cloud_sync(limit=100):
+    with _connect() as conn:
+        rows = conn.execute("SELECT id,target,record_type,record_id,attempts,last_error,created_at,updated_at FROM cloud_sync_queue WHERE synced_at IS NULL ORDER BY updated_at,id LIMIT ?", (int(limit),)).fetchall()
+        return [dict(row) for row in rows]
+
+
+def mark_cloud_sync_done(queue_id):
+    with _connect() as conn:
+        conn.execute("UPDATE cloud_sync_queue SET synced_at=datetime('now','localtime'),last_error=NULL,updated_at=datetime('now','localtime') WHERE id=?", (queue_id,))
+
+
+def mark_cloud_sync_failed(queue_id, error):
+    with _connect() as conn:
+        conn.execute("UPDATE cloud_sync_queue SET attempts=attempts+1,last_error=?,updated_at=datetime('now','localtime') WHERE id=?", (str(error)[:1000], queue_id))
+
+
+def get_cloud_queue_count():
+    with _connect() as conn:
+        row = conn.execute("SELECT SUM(CASE WHEN synced_at IS NULL THEN 1 ELSE 0 END),COUNT(*) FROM cloud_sync_queue").fetchone()
     return {"pending": int(row[0] or 0), "total": int(row[1] or 0)}

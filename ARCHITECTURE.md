@@ -29,10 +29,10 @@ I thought about keeping a separate MySQL service, but it added another boot depe
 | Data | Primary location | Other copies |
 | --- | --- | --- |
 | Card identity fallback | `data/registered_cards.json` | Reconciled with SQLite |
-| Students | SQLite `users` | Private Firebase copy without NFC UID |
-| Attendance | SQLite `user_logs` | Public-safe Firebase event copy |
-| Reservations | SQLite `reservations` | Private Firebase copy |
-| 3D model files | Pi-local `uploads/models` | Never copied to Firebase |
+| Students | SQLite `users` | Private Supabase table without NFC UID |
+| Attendance | SQLite `user_logs` | Private and sanitized Supabase tables |
+| Reservations | SQLite `reservations` | Private Supabase table |
+| 3D model files | Pi-local `uploads/models` | Never copied to Supabase |
 
 The local registry uses atomic replacement, keeps a backup copy, and applies restricted file permissions when supported. Its directory is ignored by Git.
 
@@ -40,24 +40,33 @@ The local registry uses atomic replacement, keeps a backup copy, and applies res
 
 - **Internet unavailable:** all kiosk, attendance, registration, and reservation operations continue locally.
 - **SQLite temporarily locked:** connections wait briefly and close after every transaction; WAL mode allows safe concurrent readers.
-- **Firebase unavailable:** normal local operations continue. Failed remote writes remain in `firebase_sync_queue` for retry.
+- **One remote destination unavailable:** normal local operations continue. Only that destination gets a durable retry entry; successful destinations are not repeated.
+- **Firebase Hosting unavailable:** only the shared public page is affected; the kiosk keeps running.
 - **NFC reader disconnected:** the scanner keeps retrying instead of terminating the service.
 - **Browser refreshed:** the server remains the source of truth for real NFC sessions.
 
-The Pi owns the full operational record. Hosted services consume synchronized copies but never sit in the tap path.
+The Pi owns the full operational record. Hosted services consume synchronized copies but never sit in the tap path. A bucket ID groups related installations, while a device ID identifies the originating kiosk.
+
+## Fast interface updates
+
+The scanner publishes a small server-sent event when a card is read. The browser updates only the tap-dependent parts of the page instead of continuously rendering the whole interface. If the event stream is unavailable, it falls back to a modest polling interval. There is no frontend framework or build bundle in the kiosk path.
+
+## Multiple destinations
+
+`cloud_targets.py` is the fan-out boundary. Supabase is the built-in shared database, and optional HTTPS webhooks can feed another storage service or campus integration. Private device-only fields such as NFC UIDs and uploaded model paths are removed before webhook delivery. Retry state is stored independently per target, record type, and local record ID.
 
 ## Privacy boundary
 
 Oh! This part matters: the public activity feed never needs a student's card UID or full profile.
 
 - Public responses contain sanitized event and timing fields.
-- NFC UIDs and model-file paths are removed from public Firebase records.
+- NFC UIDs and model-file paths are never sent to the public Supabase table.
 - Registration must match the latest physical tap and expires after 120 seconds.
 - The local management page requires `TAPAUTH_ADMIN_CODE`.
-- `.env`, registry data, uploads, exports, and server credentials stay outside Git.
+- `data/settings.json`, `.env`, registry data, uploads, exports, and secret keys stay outside Git.
 
 If Flask is exposed beyond a trusted local network, place it behind HTTPS, authentication, and a reverse proxy.
 
 ## Main extension points
 
-The reader, database, Firebase adapter, local registry, and interface are separate modules. A hosted API, email service, or object-storage adapter can be added without rewriting the NFC interaction itself.
+The reader, SQLite database, target adapters, local registry, and interface are separate modules. Firebase Hosting serves static files only, so hosting changes cannot break the NFC interaction.

@@ -485,6 +485,26 @@ def get_firebase_queue_count():
         close(cursor, conn)
 
 
+def enqueue_cloud_sync(target, record_type, record_id, error=None):
+    return enqueue_firebase_sync(record_type, record_id, f"[{target}] {error or ''}".strip())
+
+
+def get_pending_cloud_sync(limit=100):
+    return [{**item, "target": "supabase"} for item in get_pending_firebase_sync(limit)]
+
+
+def mark_cloud_sync_done(queue_id):
+    return mark_firebase_sync_done(queue_id)
+
+
+def mark_cloud_sync_failed(queue_id, error):
+    return mark_firebase_sync_failed(queue_id, error)
+
+
+def get_cloud_queue_count():
+    return get_firebase_queue_count()
+
+
 # SQLite is the default Raspberry Pi backend. The MySQL implementation above is
 # retained for existing installations that explicitly set AIRHUB_STORAGE=mysql.
 if APP_CONFIG.get("active_storage") == "sqlite":
@@ -492,11 +512,14 @@ if APP_CONFIG.get("active_storage") == "sqlite":
         create_reservation,
         create_user,
         delete_user,
+        enqueue_cloud_sync,
         enqueue_firebase_sync,
         get_all_logs,
         get_all_users,
+        get_cloud_queue_count,
         get_firebase_queue_count,
         get_log_by_id,
+        get_pending_cloud_sync,
         get_pending_firebase_sync,
         get_reservation_by_id,
         get_reservations,
@@ -506,6 +529,8 @@ if APP_CONFIG.get("active_storage") == "sqlite":
         get_logs,
         insert_log,
         is_user_checked_in,
+        mark_cloud_sync_done,
+        mark_cloud_sync_failed,
         mark_firebase_sync_done,
         mark_firebase_sync_failed,
         test_database_connection,

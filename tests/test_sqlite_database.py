@@ -60,14 +60,20 @@ class SQLiteDatabaseTests(unittest.TestCase):
         self.assertIsNone(teacher["queue_position"])
         self.assertEqual(len(db.get_reservations()), 3)
 
-    def test_firebase_retry_queue_is_local_and_durable(self):
-        db.enqueue_firebase_sync("user", 7, "offline")
-        self.assertEqual(db.get_firebase_queue_count(), {"pending": 1, "total": 1})
-        item = db.get_pending_firebase_sync()[0]
-        db.mark_firebase_sync_failed(item["id"], "still offline")
-        self.assertEqual(db.get_pending_firebase_sync()[0]["attempts"], 1)
-        db.mark_firebase_sync_done(item["id"])
-        self.assertEqual(db.get_firebase_queue_count(), {"pending": 0, "total": 1})
+    def test_each_cloud_target_has_an_independent_durable_retry(self):
+        db.enqueue_cloud_sync("supabase", "user", 7, "offline")
+        db.enqueue_cloud_sync("archive", "user", 7, "offline")
+        self.assertEqual(db.get_cloud_queue_count(), {"pending": 2, "total": 2})
+        items = db.get_pending_cloud_sync()
+        supabase = next(item for item in items if item["target"] == "supabase")
+        archive = next(item for item in items if item["target"] == "archive")
+        db.mark_cloud_sync_failed(supabase["id"], "still offline")
+        self.assertEqual(
+            next(item for item in db.get_pending_cloud_sync() if item["target"] == "supabase")["attempts"],
+            1,
+        )
+        db.mark_cloud_sync_done(archive["id"])
+        self.assertEqual(db.get_cloud_queue_count(), {"pending": 1, "total": 2})
 
 
 if __name__ == "__main__":

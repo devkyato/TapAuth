@@ -68,11 +68,11 @@ def main():
 
             for item in sync_items:
                 target.execute("""
-                    INSERT OR IGNORE INTO firebase_sync_queue
-                      (id,record_type,record_id,attempts,last_error,created_at,updated_at,synced_at)
+                    INSERT OR IGNORE INTO cloud_sync_queue
+                      (target,record_type,record_id,attempts,last_error,created_at,updated_at,synced_at)
                     VALUES(?,?,?,?,?,?,?,?)
-                """, tuple(item.get(key) for key in (
-                    "id", "record_type", "record_id", "attempts", "last_error",
+                """, ("supabase",) + tuple(item.get(key) for key in (
+                    "record_type", "record_id", "attempts", "last_error",
                     "created_at", "updated_at", "synced_at",
                 )))
                 imported["sync_queue"] += 1

@@ -82,6 +82,23 @@ class NFCStandbyReader:
                 **(self._last_payload or {}),
             }
 
+    def wait_for_tap(self, since_counter, timeout=15):
+        with self._cond:
+            changed = self._cond.wait_for(
+                lambda: self._tap_counter != since_counter or self._stop.is_set(),
+                timeout=timeout,
+            )
+            if not changed or self._tap_counter == since_counter:
+                return None
+            return {
+                "tap_counter": self._tap_counter,
+                "uid": self._last_uid,
+                "tap_timestamp": self._last_tap_timestamp,
+                "message": self._last_message,
+                "log_id": self._last_log_id,
+                **(self._last_payload or {}),
+            }
+
     def update_user_state(self, uid, checked_in):
         with self._lock:
             if self._last_uid != uid or not self._last_payload:

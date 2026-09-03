@@ -15,11 +15,13 @@ I started this as a straightforward tap-in and tap-out kiosk. Then I thought abo
 
 - Detects whether a registered NFC card should check in or check out.
 - Lets an unknown card register through a short, tap-bound session.
-- Stores students, attendance, reservations, and retry jobs in a local SQLite database.
+- Stores students, attendance, reservations, and per-destination retry jobs in a local SQLite database.
 - Supports 3D printing requests and teacher appointments.
 - Shows the latest 25 activity records, with a compact **See more** view.
 - Provides a private student and reservation management page.
-- Mirrors safe activity data to Firebase without exposing NFC identifiers.
+- Syncs private operational data to Supabase, can fan out safe records to custom webhooks, and hosts a sanitized activity page on Firebase Hosting.
+- Groups several kiosks under one configurable bucket while retaining a distinct device ID for each Pi.
+- Delivers taps through a lightweight live event stream, with a polling fallback for older browsers.
 - Runs without a frontend build step: Flask, Python, HTML, CSS, and JavaScript.
 
 ## The part I wanted to get right
@@ -36,10 +38,10 @@ Local card registry ---- recognized immediately
    |
    +---- SQLite ------------ students, logs, and reservations
    |
-   +---- Firebase available? - copy approved private/public records
+   +---- Supabase available? - sync private and sanitized shared records
 ```
 
-SQLite is the operational database and is built into Python, so the kiosk does not wait for a separate database service. The small card registry remains a second recognition fallback. Firebase is an optional remote copy and public-safe activity source. Existing MySQL installations can still opt into the legacy backend.
+SQLite is the operational database and is built into Python, so the kiosk does not wait for a separate database service. Supabase is the single shared data layer. Firebase only hosts the static public page, avoiding two competing cloud databases.
 
 ## Try the interface
 
@@ -55,13 +57,11 @@ For the real NFC flow, run the Flask application on a Raspberry Pi with an ACR12
 
 ## Install on a Raspberry Pi
 
-You need Raspberry Pi OS, an ACR122U USB NFC reader, and internet access for the first installation. Firebase is optional.
+You need Raspberry Pi OS, an ACR122U USB NFC reader, and internet access for the first installation. Supabase and Firebase Hosting are optional.
 
 ```bash
 git clone https://github.com/devkyato/TapAuth.git
 cd TapAuth
-cp .env.example .env
-nano .env
 bash scripts/setup_raspberry_pi.sh
 ```
 
@@ -73,50 +73,41 @@ After setup:
 - Student management: `http://127.0.0.1:5000/admin`
 - System status: `http://127.0.0.1:5000/system_status`
 
-## Configuration
+## Configuration without editing `.env`
 
-Copy [.env.example](.env.example) to `.env`. At minimum, replace these values:
+Run the interactive setup at any time:
 
-```env
-AIRHUB_STORAGE=sqlite
-TAPAUTH_SQLITE_PATH=
-TAPAUTH_ADMIN_CODE=replace-with-a-private-admin-code
+```bash
+python3 scripts/configure.py
 ```
 
-`TAPAUTH_SQLITE_PATH` may be left blank to use `data/tapauth.db`. `TAPAUTH_REGISTRY_PATH` may be left blank to use `data/registered_cards.json`.
+It writes private Pi settings to `data/settings.json` and browser-safe settings to `hosting/runtime-config.js`. Both are ignored by Git. Environment variables and `.env` are still supported for automated deployments, but they are no longer required.
 
-To enable Firebase:
+Use the same bucket ID for locations that should share data. Give every Raspberry Pi a unique device ID. The wizard can also add an optional HTTPS webhook destination; advanced installations can define several destinations with `TAPAUTH_WEBHOOK_TARGETS`. Each destination has an independent durable retry entry, so a failing archive or integration cannot block Supabase or the kiosk.
 
-```env
-AIRHUB_FIREBASE_ENABLED=true
-AIRHUB_FIREBASE_MODE=realtime_db
-AIRHUB_FIREBASE_DATABASE_URL=https://your-project-default-rtdb.region.firebasedatabase.app
-AIRHUB_FIREBASE_DATABASE_SECRET=your-server-side-database-secret
-AIRHUB_FIREBASE_PROJECT_ID=your-project-id
-AIRHUB_FIREBASE_ROOT=tapauth
+Use a Supabase **secret key** only on the Pi. Use the **publishable key** for the hosted browser. The secret key must never enter Git or `hosting/`.
+
+## Supabase data and Firebase Hosting
+
+1. Create a Supabase project and run [supabase/schema.sql](supabase/schema.sql) in its SQL editor.
+2. Run `python3 scripts/configure.py` and enter the project URL, secret key, publishable key, device ID, and Firebase project ID.
+3. Copy existing local records once:
+
+```bash
+source .venv/bin/activate
+python scripts/sync_supabase.py
 ```
 
-The Firebase browser `apiKey` identifies the web app; it is not an administrator secret. Never commit `.env`, database secrets, service-account files, student records, or NFC UIDs.
-
-## Firebase copy
-
-I treated Firebase as a synchronized view, not as a requirement for tapping a card. This keeps the kiosk usable on the local network even when cloud access is interrupted.
+4. Deploy the static page:
 
 ```bash
 npm install -g firebase-tools
 firebase login --no-localhost
 firebase use your-project-id
-firebase deploy --only database,hosting
+firebase deploy --only hosting
 ```
 
-To copy existing local records to Firebase:
-
-```bash
-source .venv/bin/activate
-python scripts/sync_realtime_db.py
-```
-
-Private users and reservations live below `tapauth/users` and `tapauth/reservations`. Only sanitized event and timing fields under `tapauth/logs` are publicly readable.
+Supabase RLS keeps students, full attendance, and reservations private. Only `tapauth_public_activity` is readable through the publishable key, and it excludes student identity and NFC data.
 
 ## Update an installed Pi
 
@@ -132,7 +123,7 @@ The update script creates a timestamped SQLite and card-registry backup before c
 
 ## Moving an existing Pi from MySQL
 
-Read [docs/PI_DEPLOYMENT.md](docs/PI_DEPLOYMENT.md) before switching an installed kiosk. The one-time migration preserves students, logs, reservations, and pending Firebase jobs.
+Read [docs/PI_DEPLOYMENT.md](docs/PI_DEPLOYMENT.md) before switching an installed kiosk. The one-time migration preserves students, logs, reservations, and pending cloud-sync jobs.
 
 ## If the reader is not responding
 
@@ -154,7 +145,8 @@ TapAuth retries disconnected readers automatically. The setup disables `pcscd` b
 | `local_registry.py` | Durable card-recognition fallback |
 | `sqlite_database.py` | Default Pi database for students, logs, reservations, and retry jobs |
 | `database.py` | Storage selector and legacy MySQL backend |
-| `firebase_adapter.py` | Firebase Realtime Database writer |
+| `supabase_adapter.py` | Shared Supabase REST synchronization |
+| `supabase/schema.sql` | Cloud schema, grants, and RLS policy |
 | `index.html`, `script.js` | Kiosk and reservation interface |
 | `templates/admin.html` | Local management page |
 | `hosting/` | Firebase-hosted public activity page |
@@ -169,9 +161,8 @@ For a deeper technical reference, see [ARCHITECTURE.md](ARCHITECTURE.md).
 python -m compileall -q .
 node --check script.js
 node --check hosting/app.js
-node --check hosting/firebase-config.js
+node --check hosting/runtime-config.example.js
 python -m json.tool firebase.json
-python -m json.tool database.rules.json
 python -m unittest discover -s tests -v
 ```
 

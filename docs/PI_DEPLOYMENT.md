@@ -1,27 +1,22 @@
 # Raspberry Pi deployment
 
-TapAuth 2.0 treats the Raspberry Pi as the complete working system. SQLite is local, Firebase is optional, and GitHub is only used when you deliberately update.
+TapAuth 2.0 treats the Raspberry Pi as the complete working system. SQLite is local, Supabase sharing is optional, Firebase only hosts the static public page, and GitHub is used when you deliberately update.
 
 ## Fresh installation
 
 ```bash
 git clone https://github.com/devkyato/TapAuth.git
 cd TapAuth
-cp .env.example .env
-nano .env
 bash scripts/setup_raspberry_pi.sh
 ```
 
-Keep these defaults:
+The setup script launches `scripts/configure.py` automatically on the first run. You can rerun it later without editing `.env`:
 
-```env
-AIRHUB_STORAGE=sqlite
-TAPAUTH_SQLITE_PATH=
-TAPAUTH_REGISTRY_PATH=
-AIRHUB_FIREBASE_ENABLED=false
+```bash
+python3 scripts/configure.py
 ```
 
-Set a private `TAPAUTH_ADMIN_CODE`. Firebase can be enabled later without changing local behavior.
+Private values live in `data/settings.json` with restricted permissions. The browser-safe Supabase URL and publishable key live in the ignored `hosting/runtime-config.js` file.
 
 ## Migrating an existing MySQL kiosk
 
@@ -36,11 +31,7 @@ python scripts/backup_local_data.py
 python scripts/migrate_mysql_to_sqlite.py
 ```
 
-Then edit `.env`:
-
-```env
-AIRHUB_STORAGE=sqlite
-```
+Then run `python3 scripts/configure.py`; it selects SQLite automatically.
 
 Apply the simpler service and restart:
 

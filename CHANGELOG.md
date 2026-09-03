@@ -14,6 +14,9 @@ This is the Pi-first release. I removed the separate database service from the d
 - Simplified the systemd service so it starts after the local filesystem, not the network.
 - Added end-to-end SQLite tests for registration, tap state, queue order, persistence, and retry jobs.
 - Added a focused Raspberry Pi deployment and recovery guide.
+- Added Supabase as the single shared database and reduced Firebase to static hosting.
+- Added an interactive configuration wizard so `.env` editing is optional.
+- Added RLS-secured private tables and a sanitized public activity table.
 
 ## 1.1.0 — 2026-07-29
 

@@ -7,26 +7,22 @@ SERVICE_NAME="airhub.service"
 RUN_USER="${SUDO_USER:-$USER}"
 RUN_HOME="$(getent passwd "$RUN_USER" | cut -d: -f6)"
 
-if [[ ! -f "$ENV_FILE" ]]; then
-  cp "$PROJECT_DIR/.env.example" "$ENV_FILE"
-  cat <<EOF
-Created $ENV_FILE.
-Edit it first, then rerun this setup script:
-  nano $ENV_FILE
-  bash scripts/setup_raspberry_pi.sh
-EOF
-  exit 1
+if [[ ! -f "$ENV_FILE" && ! -f "$PROJECT_DIR/data/settings.json" ]]; then
+  python3 "$PROJECT_DIR/scripts/configure.py"
+fi
+cd "$PROJECT_DIR"
+
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  source "$ENV_FILE"
+  set +a
 fi
 
-set -a
-source "$ENV_FILE"
-set +a
-
-DB_NAME="${AIRHUB_DB_NAME:-airhub_db}"
-DB_USER="${AIRHUB_DB_USER:-}"
-DB_PASSWORD="${AIRHUB_DB_PASSWORD:-}"
-ADMIN_CODE="${TAPAUTH_ADMIN_CODE:-${AIRHUB_REGISTRATION_CODE:-}}"
-STORAGE="${AIRHUB_STORAGE:-sqlite}"
+DB_NAME="${AIRHUB_DB_NAME:-$(python3 -c 'from config import MYSQL_CONFIG; print(MYSQL_CONFIG["database"])')}"
+DB_USER="${AIRHUB_DB_USER:-$(python3 -c 'from config import MYSQL_CONFIG; print(MYSQL_CONFIG["user"])')}"
+DB_PASSWORD="${AIRHUB_DB_PASSWORD:-$(python3 -c 'from config import MYSQL_CONFIG; print(MYSQL_CONFIG["password"])')}"
+ADMIN_CODE="${TAPAUTH_ADMIN_CODE:-$(python3 -c 'from config import ACCESS_CONFIG; print(ACCESS_CONFIG["admin_code"])')}"
+STORAGE="${AIRHUB_STORAGE:-$(python3 -c 'from config import APP_CONFIG; print(APP_CONFIG["active_storage"])')}"
 
 if [[ "$STORAGE" == "mysql" && ( -z "$DB_USER" || -z "$DB_PASSWORD" || "$DB_USER" == "your_mysql_user" || "$DB_PASSWORD" == "your_mysql_password" ) ]]; then
   cat <<EOF
@@ -104,7 +100,7 @@ After=local-fs.target
 Type=simple
 User=$RUN_USER
 WorkingDirectory=$PROJECT_DIR
-EnvironmentFile=$ENV_FILE
+EnvironmentFile=-$ENV_FILE
 Environment=PYTHONUNBUFFERED=1
 ExecStart=$PROJECT_DIR/.venv/bin/python $PROJECT_DIR/app.py
 Restart=always

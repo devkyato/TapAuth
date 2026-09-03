@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 import hmac
+import json
 import queue
 import threading
 import time
 import uuid
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, redirect, render_template, request, send_from_directory, url_for
+from flask import Flask, Response, jsonify, redirect, render_template, request, send_from_directory, stream_with_context, url_for
 from werkzeug.utils import secure_filename
 
 from config import ACCESS_CONFIG, APP_CONFIG, FIREBASE_CONFIG, WIFI_CONFIG
@@ -15,7 +16,7 @@ from database import (
     create_reservation,
     delete_user,
     get_all_users,
-    get_firebase_queue_count,
+    get_cloud_queue_count,
     get_log_by_id,
     get_logs,
     get_reservations,
@@ -29,7 +30,7 @@ from database import (
 from scanner import NFCStandbyReader
 from nfc_utils import canonicalize_nfc_uid
 from local_registry import delete_local_user, get_local_user, save_local_user
-from firebase_adapter import delete_user_from_firebase, firebase_status
+from supabase_adapter import delete_user as delete_user_from_cloud, supabase_status
 from sync_service import retry_pending, sync_log_or_queue, sync_reservation_or_queue, sync_user_or_queue
 
 app = Flask(__name__)
@@ -110,7 +111,7 @@ def enqueue_sync(record_type, record):
         app.logger.warning("Firebase sync queue is full; the record remains safe in the local database.")
 
 
-def firebase_sync_worker():
+def cloud_sync_worker():
     while True:
         record_type, record = sync_queue.get()
         try:
@@ -122,12 +123,12 @@ def firebase_sync_worker():
                 sync_log_or_queue(record)
             retry_pending(limit=5)
         except Exception as exc:
-            app.logger.warning("Background Firebase sync failed: %s", exc)
+            app.logger.warning("Background Supabase sync failed: %s", exc)
         finally:
             sync_queue.task_done()
 
 
-threading.Thread(target=firebase_sync_worker, daemon=True).start()
+threading.Thread(target=cloud_sync_worker, daemon=True).start()
 
 
 def registry_reconcile_worker():
@@ -281,7 +282,11 @@ def system_status():
                 "password_configured": bool(WIFI_CONFIG["password"]),
             },
             "database": db_status,
-            "firebase": firebase_status(),
+            "supabase": supabase_status(),
+            "firebase_hosting": {
+                "project_id": FIREBASE_CONFIG.get("project_id", ""),
+                "configured": bool(FIREBASE_CONFIG.get("project_id")),
+            },
             "scanner": nfc_reader.status(),
         }
     )
@@ -303,6 +308,31 @@ def latest_tap():
     if not data:
         return jsonify({"changed": False, "tap_counter": since})
     return jsonify({"changed": True, **data})
+
+
+@app.route("/events/taps")
+def tap_events():
+    try:
+        since = int(request.args.get("since", 0))
+    except (TypeError, ValueError):
+        since = 0
+
+    @stream_with_context
+    def generate():
+        counter = since
+        while True:
+            data = nfc_reader.wait_for_tap(counter, timeout=15)
+            if not data:
+                yield ": keepalive\n\n"
+                continue
+            counter = data["tap_counter"]
+            yield f"id: {counter}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n"
+
+    return Response(generate(), mimetype="text/event-stream", headers={
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
+        "Connection": "keep-alive",
+    })
 
 
 @app.route("/tap_action", methods=["POST"])
@@ -491,11 +521,11 @@ def admin_delete_user(user_id):
     with registration_cache_lock:
         recent_registration_cache.pop(canonicalize_nfc_uid(user.get("nfc_code")), None)
     delete_local_user(user.get("nfc_code"))
-    firebase_result = delete_user_from_firebase(user_id)
+    cloud_result = delete_user_from_cloud(user_id)
     return jsonify({
         "success": True,
         "message": f"{user.get('fullname')} was removed.",
-        "firebase": firebase_result,
+        "cloud": cloud_result,
     })
 
 
@@ -652,12 +682,14 @@ def register():
         return jsonify({"error": str(exc)}), 500
 
 @app.route("/firebase_sync_status")
-def firebase_sync_status():
-    return jsonify({**get_firebase_queue_count(), "local_queue": sync_queue.qsize(), "firebase": firebase_status()})
+@app.route("/cloud_sync_status")
+def cloud_sync_status():
+    return jsonify({**get_cloud_queue_count(), "local_queue": sync_queue.qsize(), "supabase": supabase_status()})
 
 
 @app.route("/retry_firebase_sync", methods=["POST"])
-def retry_firebase_sync():
+@app.route("/retry_cloud_sync", methods=["POST"])
+def retry_cloud_sync():
     return jsonify(retry_pending(limit=200))
 
 @app.route("/user_logs_info")

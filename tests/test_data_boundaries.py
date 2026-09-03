@@ -1,44 +1,23 @@
-import json
 import unittest
 from pathlib import Path
-
-from firebase_adapter import public_log_payload, reservation_payload, user_payload
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class DataBoundaryTests(unittest.TestCase):
-    def test_public_activity_omits_student_identity(self):
-        payload = public_log_payload({
-            "id": 1,
-            "fullname": "Private Student",
-            "firstname": "Private",
-            "lastname": "Student",
-            "student_no": "2026-00001",
-            "nfc_code": "SECRET-UID",
-            "event_type": "LOGIN",
-        })
-        for field in ("fullname", "firstname", "lastname", "student_no", "nfc_code"):
-            self.assertNotIn(field, payload)
+    def test_supabase_schema_keeps_private_tables_private(self):
+        schema = (ROOT / "supabase" / "schema.sql").read_text(encoding="utf-8").lower()
+        for table in ("tapauth_students", "tapauth_attendance", "tapauth_reservations"):
+            self.assertIn(f"alter table public.{table} enable row level security", schema)
+            self.assertIn(f"revoke all on public.{table} from anon, authenticated", schema)
+        self.assertIn("grant select on public.tapauth_public_activity to anon, authenticated", schema)
 
-    def test_private_firebase_records_omit_nfc_uid_and_local_paths(self):
-        user = user_payload({"id": 1, "nfc_code": "SECRET-UID"})
-        reservation = reservation_payload({
-            "id": 1,
-            "nfc_code": "SECRET-UID",
-            "model_file_path": "/private/model.stl",
-        })
-        self.assertNotIn("nfc_code", user)
-        self.assertNotIn("nfc_code", reservation)
-        self.assertNotIn("model_file_path", reservation)
-
-    def test_database_rules_keep_private_records_private(self):
-        rules = json.loads((ROOT / "database.rules.json").read_text(encoding="utf-8"))["rules"]["tapauth"]
-        self.assertTrue(rules["logs"][".read"])
-        self.assertFalse(rules["logs"][".write"])
-        self.assertFalse(rules["users"][".read"])
-        self.assertFalse(rules["reservations"][".read"])
+    def test_browser_config_example_contains_no_secret_key(self):
+        config = (ROOT / "hosting" / "runtime-config.example.js").read_text(encoding="utf-8")
+        self.assertIn("supabasePublishableKey", config)
+        self.assertNotIn("secretKey", config)
+        self.assertNotIn("sb_secret_", config)
 
 
 if __name__ == "__main__":

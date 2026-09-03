@@ -17,6 +17,7 @@ exports/
 uploads/
 data/
 backups/
+hosting/runtime-config.js
 *.log
 
 *.sqlite
