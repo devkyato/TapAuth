@@ -1,5 +1,21 @@
 {
   "rules": {
+    "tapauth": {
+      "logs": {
+        ".read": true,
+        ".write": false,
+        ".indexOn": ["date_logged"]
+      },
+      "users": {
+        ".read": false,
+        ".write": false
+      },
+      "reservations": {
+        ".read": false,
+        ".write": false,
+        ".indexOn": ["reservation_date", "status"]
+      }
+    },
     ".read": false,
     ".write": false
   }

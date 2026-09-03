@@ -695,37 +695,19 @@
       const response = await fetch(`/latest_tap?since=${tapCounter}`, { cache: "no-store" });
       if (!response.ok) return;
       const data = await response.json();
-      if (data.changed) handleLiveTap(data);
+      if (!data.changed) return;
+      tapCounter = data.tap_counter;
+      openTapDialog({
+        uid: data.uid,
+        tapCounter: data.tap_counter,
+        message: data.message || "School ID detected",
+        user: data.user || null,
+        lookupUnavailable: Boolean(data.lookup_unavailable),
+        lookupMessage: data.lookup_message || ""
+      });
     } catch (_) {
       // Polling automatically resumes when the Raspberry Pi service is reachable.
     }
-  }
-
-  function handleLiveTap(data) {
-    if (!data || Number(data.tap_counter) <= Number(tapCounter)) return;
-    tapCounter = data.tap_counter;
-    openTapDialog({
-      uid: data.uid,
-      tapCounter: data.tap_counter,
-      message: data.message || "School ID detected",
-      user: data.user || null,
-      lookupUnavailable: Boolean(data.lookup_unavailable),
-      lookupMessage: data.lookup_message || ""
-    });
-  }
-
-  function connectTapStream() {
-    if (!isRaspberryPiRuntime || !window.EventSource) return false;
-    const stream = new EventSource(`/events/taps?since=${encodeURIComponent(tapCounter)}`);
-    let fallbackTimer = null;
-    stream.onmessage = (event) => {
-      try { handleLiveTap(JSON.parse(event.data)); } catch (_) { /* ignore malformed events */ }
-    };
-    stream.onerror = () => {
-      stream.close();
-      if (!fallbackTimer) fallbackTimer = setInterval(pollLatestTap, 1500);
-    };
-    return true;
   }
 
   tapButton.addEventListener("click", () => openTapDialog({
@@ -824,7 +806,7 @@
   fetchLogs();
   fetchReservations();
   setInterval(updateClock, 15000);
-  if (isRaspberryPiRuntime && !connectTapStream()) setInterval(pollLatestTap, 1500);
+  if (isRaspberryPiRuntime) setInterval(pollLatestTap, 1200);
   window.addEventListener("resize", () => {
     if (!logsExpanded && recentLogs.length) renderRecentLogs();
   });

@@ -1,4 +1,15 @@
-const config = window.TAPAUTH_CLOUD_CONFIG || {};
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import {
+    getDatabase,
+    limitToLast,
+    onValue,
+    orderByChild,
+    query,
+    ref
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+
+const app = initializeApp(window.AIRHUB_FIREBASE_CONFIG);
+const db = getDatabase(app, "https://airhub-login-default-rtdb.asia-southeast1.firebasedatabase.app/");
 const logsBody = document.getElementById("logsBody");
 const syncState = document.getElementById("syncState");
 const tapMessage = document.getElementById("tapMessage");
@@ -19,33 +30,51 @@ function updateClock() {
 
 function showGreeting(row) {
     clearTimeout(greetingTimer);
-    if (row.event_type === "LOGOUT") {
+    tapMessage.classList.remove("tap-flash");
+    if (row.status === "GUEST_PENDING") {
+        tapMessage.textContent = "Guest tap recorded.";
+        tapSubtext.textContent = "Registration can be completed at the local kiosk.";
+    } else if (row.event_type === "LOGOUT") {
         tapMessage.textContent = "Check-out recorded";
         tapSubtext.textContent = `Stayed ${row.duration_label || "00:00:00"}.`;
     } else {
         tapMessage.textContent = "Check-in recorded";
         tapSubtext.textContent = "Time entered saved.";
     }
+    void tapMessage.offsetWidth;
+    tapMessage.classList.add("tap-flash");
     greetingTimer = setTimeout(() => {
+        tapMessage.classList.remove("tap-flash");
         tapMessage.textContent = "Ready for tap-in or tap-out";
         tapSubtext.textContent = "Recent taps from the Raspberry Pi appear here automatically.";
     }, 3200);
 }
 
-function renderLogs(rows) {
-    if (!rows.length) {
-        logsBody.innerHTML = '<tr><td colspan="5">No activity yet.</td></tr>';
+function renderLogs(snapshot) {
+    const value = snapshot.val() || {};
+    const rows = Object.entries(value).map(([id, row]) => ({ id, ...row }))
+        .sort((a, b) => new Date(b.date_logged || 0) - new Date(a.date_logged || 0));
+
+    if (rows.length === 0) {
+        if (lastRowsKey !== "empty") {
+            logsBody.innerHTML = '<tr><td colspan="5">No activity yet.</td></tr>';
+            lastRowsKey = "empty";
+        }
         return;
     }
+
     const newest = rows[0];
-    if (newest.id !== lastSeenId) {
+    if (newest && newest.id !== lastSeenId) {
         if (lastSeenId !== null) showGreeting(newest);
         lastSeenId = newest.id;
     }
-    const key = rows.map((row) => `${row.id}:${row.status}:${row.duration_label || ""}`).join("|");
-    if (key === lastRowsKey) return;
-    lastRowsKey = key;
-    logsBody.innerHTML = rows.map((row) => `
+
+    const visibleRows = rows.slice(0, 6);
+    const nextRowsKey = visibleRows.map((row) => `${row.id}:${row.status}:${row.duration_label || ""}`).join("|");
+    if (nextRowsKey === lastRowsKey) return;
+    lastRowsKey = nextRowsKey;
+
+    logsBody.innerHTML = visibleRows.map((row) => `
         <tr>
             <td><span class="status-pill">${escapeHtml(row.event_type || "")}</span></td>
             <td>${escapeHtml(row.date_logged || "")}</td>
@@ -56,29 +85,14 @@ function renderLogs(rows) {
     `).join("");
 }
 
-async function refresh() {
-    if (!config.supabaseUrl || !config.supabasePublishableKey) {
-        syncState.textContent = "Setup needed";
-        logsBody.innerHTML = '<tr><td colspan="5">Run the TapAuth configuration wizard before deploying Firebase Hosting.</td></tr>';
-        return;
-    }
-    const filter = [
-        config.bucketId ? `bucket_id=eq.${encodeURIComponent(config.bucketId)}` : "",
-        config.deviceId ? `device_id=eq.${encodeURIComponent(config.deviceId)}` : ""
-    ].filter(Boolean).map((part) => `&${part}`).join("");
-    const response = await fetch(
-        `${config.supabaseUrl}/rest/v1/tapauth_public_activity?select=*&order=date_logged.desc&limit=6${filter}`,
-        { headers: { apikey: config.supabasePublishableKey } }
-    );
-    if (!response.ok) throw new Error(`Supabase returned ${response.status}.`);
-    renderLogs(await response.json());
-    syncState.textContent = "Live";
-}
-
 updateClock();
 setInterval(updateClock, 1000);
-refresh().catch((error) => {
+
+const logsQuery = query(ref(db, "tapauth/logs"), orderByChild("date_logged"), limitToLast(6));
+onValue(logsQuery, (snapshot) => {
+    syncState.textContent = "Live";
+    renderLogs(snapshot);
+}, (error) => {
     syncState.textContent = "Offline";
-    logsBody.innerHTML = `<tr><td colspan="5">${escapeHtml(error.message)}</td></tr>`;
+    logsBody.innerHTML = `<tr><td colspan="5">${escapeHtml(error.message || "Unable to load Realtime Database logs.")}</td></tr>`;
 });
-setInterval(() => refresh().catch(() => { syncState.textContent = "Offline"; }), 5000);

@@ -4,27 +4,31 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$PROJECT_DIR/.env"
 SERVICE_NAME="airhub.service"
+UPDATE_SERVICE_NAME="airhub-update.service"
 RUN_USER="${SUDO_USER:-$USER}"
 RUN_HOME="$(getent passwd "$RUN_USER" | cut -d: -f6)"
 
-if [[ ! -f "$ENV_FILE" && ! -f "$PROJECT_DIR/data/settings.json" ]]; then
-  python3 "$PROJECT_DIR/scripts/configure.py"
+if [[ ! -f "$ENV_FILE" ]]; then
+  cp "$PROJECT_DIR/.env.example" "$ENV_FILE"
+  cat <<EOF
+Created $ENV_FILE.
+Edit it first, then rerun this setup script:
+  nano $ENV_FILE
+  bash scripts/setup_raspberry_pi.sh
+EOF
+  exit 1
 fi
-cd "$PROJECT_DIR"
 
-if [[ -f "$ENV_FILE" ]]; then
-  set -a
-  source "$ENV_FILE"
-  set +a
-fi
+set -a
+source "$ENV_FILE"
+set +a
 
-DB_NAME="${AIRHUB_DB_NAME:-$(python3 -c 'from config import MYSQL_CONFIG; print(MYSQL_CONFIG["database"])')}"
-DB_USER="${AIRHUB_DB_USER:-$(python3 -c 'from config import MYSQL_CONFIG; print(MYSQL_CONFIG["user"])')}"
-DB_PASSWORD="${AIRHUB_DB_PASSWORD:-$(python3 -c 'from config import MYSQL_CONFIG; print(MYSQL_CONFIG["password"])')}"
-ADMIN_CODE="${TAPAUTH_ADMIN_CODE:-$(python3 -c 'from config import ACCESS_CONFIG; print(ACCESS_CONFIG["admin_code"])')}"
-STORAGE="${AIRHUB_STORAGE:-$(python3 -c 'from config import APP_CONFIG; print(APP_CONFIG["active_storage"])')}"
+DB_NAME="${AIRHUB_DB_NAME:-airhub_db}"
+DB_USER="${AIRHUB_DB_USER:-}"
+DB_PASSWORD="${AIRHUB_DB_PASSWORD:-}"
+ADMIN_CODE="${TAPAUTH_ADMIN_CODE:-${AIRHUB_REGISTRATION_CODE:-}}"
 
-if [[ "$STORAGE" == "mysql" && ( -z "$DB_USER" || -z "$DB_PASSWORD" || "$DB_USER" == "your_mysql_user" || "$DB_PASSWORD" == "your_mysql_password" ) ]]; then
+if [[ -z "$DB_USER" || -z "$DB_PASSWORD" || "$DB_USER" == "your_mysql_user" || "$DB_PASSWORD" == "your_mysql_password" || "$DB_PASSWORD" == "replace-with-a-strong-password" ]]; then
   cat <<EOF
 Please set real MySQL credentials in $ENV_FILE before setup.
 Required:
@@ -51,6 +55,8 @@ sudo apt-get install -y \
   python3 \
   python3-venv \
   python3-pip \
+  mariadb-server \
+  mariadb-client \
   libnfc-bin \
   libnfc-dev \
   libfreefare-bin \
@@ -65,19 +71,17 @@ python3 -m venv "$PROJECT_DIR/.venv"
 "$PROJECT_DIR/.venv/bin/pip" install --upgrade pip
 "$PROJECT_DIR/.venv/bin/pip" install -r "$PROJECT_DIR/requirements.txt"
 
-if [[ "$STORAGE" == "mysql" ]]; then
-  sudo apt-get install -y mariadb-server mariadb-client
-  "$PROJECT_DIR/.venv/bin/pip" install -r "$PROJECT_DIR/requirements-mysql.txt"
-  sudo systemctl enable --now mariadb
-  sudo mysql <<SQL
+sudo systemctl enable --now mariadb
+
+sudo mysql <<SQL
 CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';
 GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'localhost';
 FLUSH PRIVILEGES;
 SQL
-  MYSQL_PWD="$DB_PASSWORD" mysql -u "$DB_USER" "$DB_NAME" < "$PROJECT_DIR/schema.sql"
-fi
-"$PROJECT_DIR/.venv/bin/python" "$PROJECT_DIR/scripts/sync_local_registry.py" || echo "Warning: registry reconciliation failed; TapAuth can retry after startup."
+
+MYSQL_PWD="$DB_PASSWORD" mysql -u "$DB_USER" "$DB_NAME" < "$PROJECT_DIR/schema.sql"
+"$PROJECT_DIR/.venv/bin/python" "$PROJECT_DIR/scripts/sync_local_registry.py" || echo "Warning: MySQL registry import failed; TapAuth will create the local registry on first registration."
 
 sudo usermod -aG plugdev "$RUN_USER" || true
 cat <<'EOF' | sudo tee /etc/udev/rules.d/99-acr122u.rules >/dev/null
@@ -94,18 +98,35 @@ echo "blacklist pn533_usb" | sudo tee /etc/modprobe.d/blacklist-libnfc.conf >/de
 sudo tee "/etc/systemd/system/$SERVICE_NAME" >/dev/null <<EOF
 [Unit]
 Description=TapAuth NFC Flask App
-After=local-fs.target
+After=network-online.target mariadb.service $UPDATE_SERVICE_NAME
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=$RUN_USER
 WorkingDirectory=$PROJECT_DIR
-EnvironmentFile=-$ENV_FILE
-Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=$ENV_FILE
 ExecStart=$PROJECT_DIR/.venv/bin/python $PROJECT_DIR/app.py
 Restart=always
 RestartSec=5
-TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo tee "/etc/systemd/system/$UPDATE_SERVICE_NAME" >/dev/null <<EOF
+[Unit]
+Description=Update TapAuth from GitHub on boot
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=$RUN_USER
+WorkingDirectory=$PROJECT_DIR
+Environment=AIRHUB_SKIP_SERVICE_RESTART=1
+ExecStart=/usr/bin/bash $PROJECT_DIR/scripts/update_pi_from_github.sh
+TimeoutStartSec=300
 
 [Install]
 WantedBy=multi-user.target
@@ -124,15 +145,12 @@ EOF
 fi
 
 sudo systemctl daemon-reload
-sudo systemctl disable --now airhub-update.service 2>/dev/null || true
+sudo systemctl enable "$UPDATE_SERVICE_NAME"
 sudo systemctl enable "$SERVICE_NAME"
 sudo systemctl restart "$SERVICE_NAME"
 
 cat <<EOF
 TapAuth setup complete.
-
-Storage backend:
-  $STORAGE
 
 Service status:
   sudo systemctl status $SERVICE_NAME
@@ -154,7 +172,4 @@ Chromium kiosk autostart:
 
 If the ACR122U still shows USB busy, unplug it, wait 5 seconds, plug it back in, then run:
   sudo systemctl restart $SERVICE_NAME
-
-Updates are intentionally manual so a network outage cannot delay kiosk startup:
-  bash scripts/update_pi_from_github.sh
 EOF

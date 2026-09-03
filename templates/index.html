@@ -106,9 +106,7 @@
                 .then((response) => response.json())
                 .then((data) => {
                     $('#readerStatus').textContent = data.scanner.connected ? 'Connected' : 'Standby';
-                    $('#databaseStatus').textContent = data.database.connected
-                        ? `Local ${String(data.database.driver || 'database').toUpperCase()}`
-                        : 'Needs setup';
+                    $('#databaseStatus').textContent = data.database.connected ? 'Local MySQL' : 'Needs setup';
                     $('#wifiStatus').textContent = data.wifi.ssid || 'Not configured';
                 });
         }

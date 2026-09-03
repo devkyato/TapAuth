@@ -2,21 +2,28 @@
 
 This file records the changes I would want to know about before updating an installed TapAuth kiosk.
 
-## 2.0.0 — 2026-09-03
+## Unreleased
 
-This is the Pi-first release. I removed the separate database service from the default runtime because the kiosk should not need internet, GitHub, Firebase, or MariaDB to open and do its job.
+## 1.1.3 - 2026-08-12
 
-- Made SQLite the default database for students, attendance, reservations, and Firebase retry jobs.
-- Kept MySQL as an explicit legacy backend for existing deployments.
-- Added a one-time MySQL-to-SQLite migration tool.
-- Added automatic local backups before manual updates.
-- Removed GitHub updates from the boot dependency chain.
-- Simplified the systemd service so it starts after the local filesystem, not the network.
-- Added end-to-end SQLite tests for registration, tap state, queue order, persistence, and retry jobs.
-- Added a focused Raspberry Pi deployment and recovery guide.
-- Added Supabase as the single shared database and reduced Firebase to static hosting.
-- Added an interactive configuration wizard so `.env` editing is optional.
-- Added RLS-secured private tables and a sanitized public activity table.
+- Reject the `.env.example` MySQL password placeholder during Raspberry Pi setup.
+- Compare admin/registration codes with `hmac.compare_digest` and accept `X-TapAuth-Code`.
+
+## 1.1.2 — 2026-08-09
+
+- Overhaul the Zenodo presentation with sanitizer-safe sections for use,
+  limits, documentation, related software, and citation.
+- Expand citation metadata without asserting a DOI, ORCID, or legal name.
+- Add getting-started, operations index, release notes, and a release
+  checklist.
+- Clarify that TapAuth is the product regardless of checkout-folder name and
+  that it is a deployed application rather than a published source package.
+- Keep kiosk, NFC, registry, MySQL, and Firebase behaviour unchanged.
+
+## 1.1.1 — 2026-08-09
+
+- Add Zenodo and Citation File Format metadata for archival citation.
+- Refresh the published application version and repository citation guidance.
 
 ## 1.1.0 — 2026-07-29
 
