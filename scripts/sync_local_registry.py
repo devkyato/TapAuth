@@ -28,7 +28,7 @@ def main():
     saved = save_local_users(users)
     print(
         f"Local NFC registry ready: {saved} student(s) cached, "
-        f"{restored} local record(s) reconciled at {REGISTRY_PATH}"
+        f"{restored} local record(s) reconciled with the active database at {REGISTRY_PATH}"
     )
 
 

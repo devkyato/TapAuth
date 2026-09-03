@@ -9,13 +9,13 @@
 
 TapAuth is my Raspberry Pi NFC attendance and reservation system for the Asia Pacific College School of Engineering AIRHub.
 
-I started this as a straightforward tap-in and tap-out kiosk. Then I thought about what happens when the internet drops, MySQL restarts, or a newly registered card is tapped again immediately. That changed the project: the Pi now recognizes cards from its own durable registry first, keeps normal kiosk interactions fast, and reconciles data with MySQL and Firebase when those services are available.
+I started this as a straightforward tap-in and tap-out kiosk. Then I thought about what happens when the internet drops, a database service restarts, or a newly registered card is tapped again immediately. That changed the project: the Pi now owns the complete working database and the hosted side is optional.
 
 ## What it does
 
 - Detects whether a registered NFC card should check in or check out.
 - Lets an unknown card register through a short, tap-bound session.
-- Keeps registered cards recognizable without depending on MySQL for every tap.
+- Stores students, attendance, reservations, and retry jobs in a local SQLite database.
 - Supports 3D printing requests and teacher appointments.
 - Shows the latest 25 activity records, with a compact **See more** view.
 - Provides a private student and reservation management page.
@@ -34,12 +34,12 @@ NFC card
    v
 Local card registry ---- recognized immediately
    |
-   +---- MySQL available? ---- sync student and attendance data
+   +---- SQLite ------------ students, logs, and reservations
    |
    +---- Firebase available? - copy approved private/public records
 ```
 
-MySQL remains the main operational database. The local registry is the recognition fallback, not a public student database. Firebase is an optional remote copy and public-safe activity source.
+SQLite is the operational database and is built into Python, so the kiosk does not wait for a separate database service. The small card registry remains a second recognition fallback. Firebase is an optional remote copy and public-safe activity source. Existing MySQL installations can still opt into the legacy backend.
 
 ## Try the interface
 
@@ -65,7 +65,7 @@ nano .env
 bash scripts/setup_raspberry_pi.sh
 ```
 
-The setup script installs MariaDB, Python dependencies, libnfc, reader permissions, the `airhub.service` systemd unit, and Chromium kiosk startup.
+The setup script installs Python dependencies, libnfc, reader permissions, the `airhub.service` systemd unit, and Chromium kiosk startup. It does not require MariaDB or internet access after installation.
 
 After setup:
 
@@ -78,13 +78,12 @@ After setup:
 Copy [.env.example](.env.example) to `.env`. At minimum, replace these values:
 
 ```env
-AIRHUB_DB_USER=airhub_app
-AIRHUB_DB_PASSWORD=replace-with-a-strong-password
-AIRHUB_DB_NAME=airhub_db
+AIRHUB_STORAGE=sqlite
+TAPAUTH_SQLITE_PATH=
 TAPAUTH_ADMIN_CODE=replace-with-a-private-admin-code
 ```
 
-`TAPAUTH_REGISTRY_PATH` may be left blank to use `data/registered_cards.json`.
+`TAPAUTH_SQLITE_PATH` may be left blank to use `data/tapauth.db`. `TAPAUTH_REGISTRY_PATH` may be left blank to use `data/registered_cards.json`.
 
 To enable Firebase:
 
@@ -110,7 +109,7 @@ firebase use your-project-id
 firebase deploy --only database,hosting
 ```
 
-To copy existing MySQL records:
+To copy existing local records to Firebase:
 
 ```bash
 source .venv/bin/activate
@@ -129,7 +128,11 @@ sudo systemctl restart airhub.service
 sudo systemctl status airhub.service
 ```
 
-The update script also reconciles MySQL students with the local card registry. If MySQL is temporarily unavailable, the existing local registry stays usable.
+The update script creates a timestamped SQLite and card-registry backup before changing code. Updates are manual by design, so a GitHub or internet outage cannot delay kiosk startup.
+
+## Moving an existing Pi from MySQL
+
+Read [docs/PI_DEPLOYMENT.md](docs/PI_DEPLOYMENT.md) before switching an installed kiosk. The one-time migration preserves students, logs, reservations, and pending Firebase jobs.
 
 ## If the reader is not responding
 
@@ -149,7 +152,8 @@ TapAuth retries disconnected readers automatically. The setup disables `pcscd` b
 | `scanner.py` | ACR122U reader loop and reconnection |
 | `nfc_utils.py` | Stable UID normalization |
 | `local_registry.py` | Durable card-recognition fallback |
-| `database.py` | MySQL students, logs, reservations, and sync queue |
+| `sqlite_database.py` | Default Pi database for students, logs, reservations, and retry jobs |
+| `database.py` | Storage selector and legacy MySQL backend |
 | `firebase_adapter.py` | Firebase Realtime Database writer |
 | `index.html`, `script.js` | Kiosk and reservation interface |
 | `templates/admin.html` | Local management page |

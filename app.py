@@ -107,7 +107,7 @@ def enqueue_sync(record_type, record):
     try:
         sync_queue.put_nowait((record_type, record))
     except queue.Full:
-        app.logger.warning("Firebase sync queue is full; record will remain in local MySQL only for now.")
+        app.logger.warning("Firebase sync queue is full; the record remains safe in the local database.")
 
 
 def firebase_sync_worker():
@@ -147,7 +147,7 @@ def registry_reconcile_worker():
             save_local_user(record)
             enqueue_sync("user", record)
         except Exception as exc:
-            app.logger.debug("Local registration is waiting for MySQL: %s", exc)
+            app.logger.debug("Local registration reconciliation is waiting for the active database: %s", exc)
         finally:
             registry_reconcile_queue.task_done()
 
@@ -432,7 +432,7 @@ def register_from_tap():
             "room": "AIRHUB",
             "nfc_code": uid,
         })
-        mysql_saved = False
+        database_saved = False
         try:
             user_record = create_user(
                 student_no=str(data["student_no"]),
@@ -445,9 +445,9 @@ def register_from_tap():
                 nfc_code=uid,
             )
             save_local_user(user_record, uid)
-            mysql_saved = True
+            database_saved = True
         except Exception as exc:
-            app.logger.warning("Registration saved locally while MySQL is unavailable: %s", exc)
+            app.logger.warning("Registration saved in the card registry while the active database is unavailable: %s", exc)
             user_record = local_record
         user_response = {
             "firstname": user_record.get("firstname"),
@@ -458,12 +458,12 @@ def register_from_tap():
         }
         cache_registered_user(uid, user_record)
         nfc_reader.cache_registered_user(uid, user_response)
-        if mysql_saved:
+        if database_saved:
             enqueue_sync("user", user_record)
         return jsonify({
             "success": True,
-            "message": "Registration complete." if mysql_saved else "Registration saved on this device.",
-            "storage": "mysql_and_local" if mysql_saved else "local_registry",
+            "message": "Registration complete." if database_saved else "Registration saved on this device.",
+            "storage": "database_and_local" if database_saved else "local_registry",
             "user": user_response,
         })
     except Exception as exc:

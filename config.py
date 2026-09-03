@@ -20,9 +20,9 @@ else:
 
 APP_CONFIG = {
     "name": "TapAuth",
-    "version": "1.1.0",
+    "version": "2.0.0",
     "environment": os.getenv("AIRHUB_ENV", "local"),
-    "active_storage": os.getenv("AIRHUB_STORAGE", "mysql"),
+    "active_storage": os.getenv("AIRHUB_STORAGE", "sqlite").strip().lower(),
     "firebase_ready": True,
     "debug": os.getenv("AIRHUB_DEBUG", "false").lower() == "true",
 }
@@ -37,6 +37,11 @@ MYSQL_CONFIG = {
     "user": os.getenv("AIRHUB_DB_USER", ""),
     "password": os.getenv("AIRHUB_DB_PASSWORD", ""),
     "database": os.getenv("AIRHUB_DB_NAME", "airhub_db"),
+}
+
+SQLITE_CONFIG = {
+    "path": os.getenv("TAPAUTH_SQLITE_PATH", "").strip()
+    or str(Path(__file__).with_name("data") / "tapauth.db"),
 }
 
 FIREBASE_CONFIG = {

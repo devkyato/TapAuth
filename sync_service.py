@@ -7,12 +7,14 @@ from database import (
     mark_firebase_sync_done,
     mark_firebase_sync_failed,
 )
-from firebase_adapter import sync_log, sync_reservation, sync_user
+from firebase_adapter import firebase_is_configured, sync_log, sync_reservation, sync_user
 
 
 def sync_or_queue(record_type, record):
     if not record:
         return {"synced": False, "queued": False, "reason": "Missing record."}
+    if not firebase_is_configured():
+        return {"synced": False, "queued": False, "disabled": True, "reason": "Firebase sync is disabled."}
     if record_type == "log":
         result = sync_log(record)
     elif record_type == "reservation":
@@ -39,6 +41,8 @@ def sync_reservation_or_queue(record):
 
 def retry_pending(limit=100):
     summary = {"attempted": 0, "synced": 0, "failed": 0}
+    if not firebase_is_configured():
+        return {**summary, "disabled": True}
     for item in get_pending_firebase_sync(limit=limit):
         summary["attempted"] += 1
         if item["record_type"] == "user":

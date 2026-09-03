@@ -18,13 +18,18 @@ set +a
 DB_NAME="${AIRHUB_DB_NAME:-airhub_db}"
 DB_USER="${AIRHUB_DB_USER:-}"
 DB_PASSWORD="${AIRHUB_DB_PASSWORD:-}"
+STORAGE="${AIRHUB_STORAGE:-sqlite}"
 
-if [[ -z "$DB_USER" || -z "$DB_PASSWORD" ]]; then
+if [[ "$STORAGE" == "mysql" && ( -z "$DB_USER" || -z "$DB_PASSWORD" ) ]]; then
   echo "AIRHUB_DB_USER and AIRHUB_DB_PASSWORD are required in $ENV_FILE."
   exit 1
 fi
 
 cd "$PROJECT_DIR"
+
+if [[ -x ".venv/bin/python" ]]; then
+  .venv/bin/python scripts/backup_local_data.py || echo "Warning: pre-update backup failed; update will continue."
+fi
 
 git fetch origin "$GIT_BRANCH"
 git checkout "$GIT_BRANCH"
@@ -50,17 +55,18 @@ else
   .venv/bin/pip install -r requirements.txt
 fi
 
-sudo systemctl enable --now mariadb
-
-sudo mysql <<SQL
+if [[ "$STORAGE" == "mysql" ]]; then
+  .venv/bin/pip install -r requirements-mysql.txt
+  sudo systemctl enable --now mariadb
+  sudo mysql <<SQL
 CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';
 GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'localhost';
 FLUSH PRIVILEGES;
 SQL
-
-MYSQL_PWD="$DB_PASSWORD" mysql -u "$DB_USER" "$DB_NAME" < schema.sql
-.venv/bin/python scripts/sync_local_registry.py || echo "Warning: MySQL registry import failed; the existing local NFC registry remains available."
+  MYSQL_PWD="$DB_PASSWORD" mysql -u "$DB_USER" "$DB_NAME" < schema.sql
+fi
+.venv/bin/python scripts/sync_local_registry.py || echo "Warning: registry reconciliation failed; the existing local NFC registry remains available."
 sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE_NAME"
 if [[ "${AIRHUB_SKIP_SERVICE_RESTART:-0}" != "1" ]]; then

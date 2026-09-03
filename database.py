@@ -1,6 +1,9 @@
-import mysql.connector
+try:
+    import mysql.connector
+except ImportError:
+    mysql = None
 
-from config import MYSQL_CONFIG
+from config import APP_CONFIG, MYSQL_CONFIG
 from nfc_utils import canonicalize_nfc_uid
 
 
@@ -27,6 +30,8 @@ RESERVATION_COLUMNS = (
 
 
 def get_connection():
+    if mysql is None:
+        raise RuntimeError("MySQL support is not installed. Use AIRHUB_STORAGE=sqlite or install requirements-mysql.txt.")
     return mysql.connector.connect(**MYSQL_CONFIG)
 
 
@@ -478,3 +483,31 @@ def get_firebase_queue_count():
         return {"pending": int(row.get("pending") or 0), "total": int(row.get("total") or 0)}
     finally:
         close(cursor, conn)
+
+
+# SQLite is the default Raspberry Pi backend. The MySQL implementation above is
+# retained for existing installations that explicitly set AIRHUB_STORAGE=mysql.
+if APP_CONFIG.get("active_storage") == "sqlite":
+    from sqlite_database import (
+        create_reservation,
+        create_user,
+        delete_user,
+        enqueue_firebase_sync,
+        get_all_logs,
+        get_all_users,
+        get_firebase_queue_count,
+        get_log_by_id,
+        get_pending_firebase_sync,
+        get_reservation_by_id,
+        get_reservations,
+        get_user_by_id,
+        get_user_by_nfc,
+        get_user_fullname,
+        get_logs,
+        insert_log,
+        is_user_checked_in,
+        mark_firebase_sync_done,
+        mark_firebase_sync_failed,
+        test_database_connection,
+        update_reservation_status,
+    )
